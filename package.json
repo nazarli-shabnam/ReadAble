@@ -1,18 +1,29 @@
 {
-  "name": "new_project",
+  "name": "readable",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/atkinson-hyperlegible": "^0.2.2",
+    "@react-native-async-storage/async-storage": "^2.1.0",
+    "@react-native-ml-kit/text-recognition": "^2.0.0",
+    "date-fns": "^4.1.0",
     "expo": "~54.0.29",
+    "expo-camera": "~17.0.10",
+    "expo-constants": "~18.0.12",
+    "expo-file-system": "~19.0.21",
+    "expo-image-picker": "~17.0.10",
+    "expo-sharing": "~14.0.7",
+    "expo-speech": "~14.0.8",
     "expo-status-bar": "~3.0.9",
-    "react": "19.1.0",
-    "react-native": "0.81.5"
+    "react": "18.3.1",
+    "react-native": "0.77.0"
   },
-  "private": true
+  "private": true,
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
