@@ -11,6 +11,7 @@
   "dependencies": {
     "@expo-google-fonts/atkinson-hyperlegible": "^0.2.2",
     "@react-native-async-storage/async-storage": "^2.1.0",
+    "expo-clipboard": "~7.0.0",
     "@react-native-ml-kit/text-recognition": "^2.0.0",
     "date-fns": "^4.1.0",
     "expo": "~54.0.29",
