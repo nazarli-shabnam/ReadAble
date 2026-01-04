@@ -88,108 +88,110 @@ export const useDocumentProcessor = () => {
     [activeDoc]
   );
 
-  const speak = useCallback((doc, mode = "simplified", startIndex = 0) => {
-    if (!doc) return;
-    const sentenceList =
-      mode === "simplified"
-        ? splitSentences(doc.simplifiedText)
-        : doc.sentences?.length
-        ? doc.sentences
-        : splitSentences(doc.rawText);
-    const segments = sentenceList.length
-      ? sentenceList
-      : [mode === "simplified" ? doc.simplifiedText : doc.rawText];
+  const speak = useCallback(
+    (doc, mode = "simplified", startIndex = 0, rate = 1.0) => {
+      if (!doc) return;
+      const sentenceList =
+        mode === "simplified"
+          ? splitSentences(doc.simplifiedText)
+          : doc.sentences?.length
+          ? doc.sentences
+          : splitSentences(doc.rawText);
+      const segments = sentenceList.length
+        ? sentenceList
+        : [mode === "simplified" ? doc.simplifiedText : doc.rawText];
 
-    Speech.stop();
-    isPausedRef.current = false;
-    shouldStopRef.current = false;
+      Speech.stop();
+      isPausedRef.current = false;
+      shouldStopRef.current = false;
 
-    let idx = Math.max(0, startIndex);
-    const speakNext = () => {
-      // Check if we should stop
-      if (shouldStopRef.current) {
+      let idx = Math.max(0, startIndex);
+      const speakNext = () => {
+        if (shouldStopRef.current) {
+          setTtsState({
+            speaking: false,
+            paused: false,
+            lastText: "",
+            sentenceIndex: null,
+            totalSentences: 0,
+            segments: [],
+          });
+          setCurrentSpeechId(null);
+          return;
+        }
+
+        if (isPausedRef.current) {
+          return;
+        }
+
+        const segment = segments[idx];
+        if (!segment) {
+          setTtsState({
+            speaking: false,
+            paused: false,
+            lastText: "",
+            sentenceIndex: null,
+            totalSentences: 0,
+            segments: [],
+          });
+          setCurrentSpeechId(null);
+          return;
+        }
         setTtsState({
-          speaking: false,
+          speaking: true,
           paused: false,
-          lastText: "",
-          sentenceIndex: null,
-          totalSentences: 0,
-          segments: [],
+          lastText: segment,
+          sentenceIndex: idx,
+          totalSentences: segments.length,
+          segments,
         });
-        setCurrentSpeechId(null);
-        return;
-      }
 
-      // Check if paused
-      if (isPausedRef.current) {
-        return;
-      }
-
-      const segment = segments[idx];
-      if (!segment) {
-        setTtsState({
-          speaking: false,
-          paused: false,
-          lastText: "",
-          sentenceIndex: null,
-          totalSentences: 0,
-          segments: [],
-        });
-        setCurrentSpeechId(null);
-        return;
-      }
-      setTtsState({
-        speaking: true,
-        paused: false,
-        lastText: segment,
-        sentenceIndex: idx,
-        totalSentences: segments.length,
-        segments,
-      });
-
-      const speechId = Speech.speak(segment, {
-        language: "en-US",
-        onDone: () => {
-          if (shouldStopRef.current || isPausedRef.current) return;
-          idx += 1;
-          if (idx < segments.length) {
-            speakNext();
-          } else {
-            setTtsState({
-              speaking: false,
-              paused: false,
-              lastText: "",
-              sentenceIndex: null,
-              totalSentences: segments.length,
-              segments: [],
-            });
-            setCurrentSpeechId(null);
-          }
-        },
-        onStopped: () => {
-          // Only update state if we're not intentionally paused or stopped
-          if (!isPausedRef.current && !shouldStopRef.current) {
+        const speechId = Speech.speak(segment, {
+          language: "en-US",
+          rate: rate,
+          onDone: () => {
+            if (shouldStopRef.current || isPausedRef.current) return;
+            idx += 1;
+            if (idx < segments.length) {
+              speakNext();
+            } else {
+              setTtsState({
+                speaking: false,
+                paused: false,
+                lastText: "",
+                sentenceIndex: null,
+                totalSentences: segments.length,
+                segments: [],
+              });
+              setCurrentSpeechId(null);
+            }
+          },
+          onStopped: () => {
+            // Only update state if we're not intentionally paused or stopped
+            if (!isPausedRef.current && !shouldStopRef.current) {
+              setTtsState((s) => ({
+                ...s,
+                speaking: false,
+                paused: false,
+                sentenceIndex: null,
+              }));
+            }
+          },
+          onError: () =>
             setTtsState((s) => ({
               ...s,
               speaking: false,
               paused: false,
               sentenceIndex: null,
-            }));
-          }
-        },
-        onError: () =>
-          setTtsState((s) => ({
-            ...s,
-            speaking: false,
-            paused: false,
-            sentenceIndex: null,
-          })),
-      });
-      setCurrentSpeechId(speechId);
-    };
+            })),
+        });
+        setCurrentSpeechId(speechId);
+      };
 
-    speakNext();
-  }, []);
+      speakNext();
+    },
+    []
+  );
 
   const pauseSpeaking = useCallback(() => {
     isPausedRef.current = true;
@@ -199,22 +201,22 @@ export const useDocumentProcessor = () => {
   }, []);
 
   const resumeSpeaking = useCallback(
-    (doc, mode) => {
+    (doc, mode, rate = 1.0) => {
       if (!doc) return;
       isPausedRef.current = false;
       shouldStopRef.current = false;
       const currentIdx =
         ttsState.sentenceIndex !== null ? ttsState.sentenceIndex + 1 : 0;
-      speak(doc, mode, currentIdx);
+      speak(doc, mode, currentIdx, rate);
     },
     [ttsState.sentenceIndex, speak]
   );
 
   const seekToSentence = useCallback(
-    (doc, mode, sentenceIndex) => {
+    (doc, mode, sentenceIndex, rate = 1.0) => {
       if (!doc) return;
       Speech.stop();
-      speak(doc, mode, sentenceIndex);
+      speak(doc, mode, sentenceIndex, rate);
     },
     [speak]
   );
