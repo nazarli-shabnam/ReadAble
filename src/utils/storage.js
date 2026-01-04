@@ -66,3 +66,13 @@ export const exportDocumentSummary = (doc) => {
   lines.push(doc.simplifiedText || doc.rawText);
   return lines.join("\n");
 };
+
+export const clearAllDocuments = async () => {
+  try {
+    await AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
+    return true;
+  } catch (err) {
+    console.warn("Failed to clear all documents:", err);
+    return false;
+  }
+};
