@@ -76,6 +76,8 @@ export const AccessibilityControls = ({
   onFontChange,
   focusMode,
   onToggleFocusMode,
+  ttsRate,
+  onTtsRateChange,
 }) => {
   const overlayOptions = ["#fef3c7", "#e0f2fe", "#f5f3ff", "#ecfeff"];
   const fontOptions = [
@@ -190,6 +192,17 @@ export const AccessibilityControls = ({
           <Text style={{ fontWeight: "600", marginRight: 8 }}>Focus mode</Text>
           <Switch value={focusMode} onValueChange={onToggleFocusMode} />
         </View>
+      )}
+      {onTtsRateChange && (
+        <Stepper
+          label="TTS Speed"
+          value={ttsRate}
+          onChange={onTtsRateChange}
+          step={0.1}
+          min={0.5}
+          max={2.0}
+          formatValue={(v) => `${v.toFixed(1)}x`}
+        />
       )}
     </View>
   );
