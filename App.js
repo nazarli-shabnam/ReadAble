@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -11,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import {
   useFonts,
   AtkinsonHyperlegible_400Regular,
@@ -23,7 +25,11 @@ import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage } from "./src/utils/ocr";
 import { splitSentences } from "./src/utils/textProcessing";
-import { exportDocumentSummary, deleteDocument } from "./src/utils/storage";
+import {
+  exportDocumentSummary,
+  deleteDocument,
+  clearAllDocuments,
+} from "./src/utils/storage";
 import * as Sharing from "expo-sharing";
 
 const toRgba = (hex, opacity) => {
@@ -57,6 +63,7 @@ export default function App() {
   const [focusMode, setFocusMode] = useState(false);
   const [focusLineIndex, setFocusLineIndex] = useState(0);
   const [offlineMode, setOfflineMode] = useState(true);
+  const [ttsRate, setTtsRate] = useState(1.0);
   const {
     activeDoc,
     history,
@@ -118,7 +125,8 @@ export default function App() {
 
   const handleStop = () => stopSpeaking();
   const handlePause = () => pauseSpeaking();
-  const handleResume = () => resumeSpeaking(activeDoc, viewMode);
+  const handleResume = () => resumeSpeaking(activeDoc, viewMode, ttsRate);
+  const handleSpeak = () => speak(activeDoc, viewMode, 0, ttsRate);
 
   const handleLoadDocument = async (docId) => {
     await loadDocument(docId);
@@ -302,13 +310,34 @@ export default function App() {
               <Text style={styles.secondaryButtonText}>Use sample</Text>
             </TouchableOpacity>
           </View>
-          <TextInput
-            multiline
-            placeholder="Paste or type text; OCR wire-up coming from ML Kit / Apple Vision."
-            value={inputText}
-            onChangeText={setInputText}
-            style={styles.textArea}
-          />
+          <View style={{ position: "relative" }}>
+            <TextInput
+              multiline
+              placeholder="Paste or type text; OCR wire-up coming from ML Kit / Apple Vision."
+              value={inputText}
+              onChangeText={setInputText}
+              style={styles.textArea}
+            />
+            {inputText.length > 0 && (
+              <TouchableOpacity
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  right: 8,
+                  padding: 6,
+                  backgroundColor: "#ef4444",
+                  borderRadius: 6,
+                }}
+                onPress={() => setInputText("")}
+              >
+                <Text
+                  style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}
+                >
+                  Clear
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <TouchableOpacity
             style={styles.button}
             onPress={handleProcess}
@@ -347,6 +376,8 @@ export default function App() {
             onFontChange={setSelectedFont}
             focusMode={focusMode}
             onToggleFocusMode={() => setFocusMode((v) => !v)}
+            ttsRate={ttsRate}
+            onTtsRateChange={setTtsRate}
           />
           {activeDoc ? (
             <View>
@@ -483,9 +514,57 @@ export default function App() {
             3) Summary
           </Text>
           {activeDoc?.summary ? (
-            <Text style={[styles.body, highContrast && { color: "#000" }]}>
-              {activeDoc.summary}
-            </Text>
+            <>
+              <Text style={[styles.body, highContrast && { color: "#000" }]}>
+                {activeDoc.summary}
+              </Text>
+              {activeDoc.rawText && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    gap: 16,
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTopWidth: 1,
+                    borderTopColor: highContrast ? "#000" : "#e5e7eb",
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.placeholder,
+                      { fontSize: 12 },
+                      highContrast && { color: "#000" },
+                    ]}
+                  >
+                    📊 Words:{" "}
+                    {activeDoc.rawText.split(/\s+/).filter(Boolean).length}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.placeholder,
+                      { fontSize: 12 },
+                      highContrast && { color: "#000" },
+                    ]}
+                  >
+                    ⏱️ Reading time:{" "}
+                    {Math.ceil(
+                      activeDoc.rawText.split(/\s+/).filter(Boolean).length /
+                        200
+                    )}{" "}
+                    min
+                  </Text>
+                  <Text
+                    style={[
+                      styles.placeholder,
+                      { fontSize: 12 },
+                      highContrast && { color: "#000" },
+                    ]}
+                  >
+                    📝 Sentences: {activeDoc.sentences?.length || 0}
+                  </Text>
+                </View>
+              )}
+            </>
           ) : (
             <Text
               style={[styles.placeholder, highContrast && { color: "#000" }]}
@@ -519,9 +598,32 @@ export default function App() {
           </TouchableOpacity>
           {answer ? (
             <View>
-              <Text style={[styles.body, highContrast && { color: "#000" }]}>
-                {answer}
-              </Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 8,
+                }}
+              >
+                <Text style={[styles.body, highContrast && { color: "#000" }]}>
+                  {answer}
+                </Text>
+                <TouchableOpacity
+                  style={{
+                    padding: 8,
+                    backgroundColor: "#e0e7ff",
+                    borderRadius: 6,
+                    marginLeft: 8,
+                  }}
+                  onPress={async () => {
+                    await Clipboard.setStringAsync(answer);
+                    Alert.alert("Copied", "Answer copied to clipboard!");
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "600" }}>Copy</Text>
+                </TouchableOpacity>
+              </View>
               {answerConfidence > 0 && (
                 <Text
                   style={[
@@ -562,9 +664,9 @@ export default function App() {
               style={styles.button}
               onPress={() => {
                 if (ttsState.paused) {
-                  resumeSpeaking(activeDoc, viewMode);
+                  resumeSpeaking(activeDoc, viewMode, ttsRate);
                 } else {
-                  speak(activeDoc, viewMode);
+                  handleSpeak();
                 }
               }}
               disabled={!activeDoc}
@@ -606,7 +708,9 @@ export default function App() {
               }).map((_, i) => (
                 <TouchableOpacity
                   key={i}
-                  onPress={() => seekToSentence(activeDoc, viewMode, i)}
+                  onPress={() =>
+                    seekToSentence(activeDoc, viewMode, i, ttsRate)
+                  }
                   style={{
                     padding: 4,
                     paddingHorizontal: 8,
@@ -623,11 +727,53 @@ export default function App() {
         </View>
 
         <View style={[styles.card, highContrast && styles.cardHighContrast]}>
-          <Text
-            style={[styles.sectionTitle, highContrast && { color: "#000" }]}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
           >
-            6) History & Export
-          </Text>
+            <Text
+              style={[styles.sectionTitle, highContrast && { color: "#000" }]}
+            >
+              6) History & Export
+            </Text>
+            {history.length > 0 && (
+              <TouchableOpacity
+                style={{
+                  padding: 6,
+                  backgroundColor: "#ef4444",
+                  borderRadius: 6,
+                }}
+                onPress={() => {
+                  Alert.alert(
+                    "Clear All History",
+                    "Are you sure you want to clear all history? This cannot be undone.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Clear All",
+                        style: "destructive",
+                        onPress: async () => {
+                          await clearAllDocuments();
+                          await refreshDocuments();
+                          Alert.alert("Success", "All history cleared.");
+                        },
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Text
+                  style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}
+                >
+                  Clear All
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
           {activeDoc && (
             <TouchableOpacity style={styles.button} onPress={handleExport}>
               <Text style={styles.buttonText}>Export Summary</Text>
