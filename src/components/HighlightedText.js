@@ -19,21 +19,33 @@ export const HighlightedText = ({
   sentences = [],
   activeSentenceIndex = null,
   highContrast = false,
+  sentenceRanges: providedRanges = null,
 }) => {
   if (!text) return null;
   const dateMap = buildHighlightMap(dates);
   const amountMap = buildHighlightMap(amounts);
-  const sentenceRanges = [];
-  let cursor = 0;
-  sentences.forEach((sentence) => {
-    const idx = text.indexOf(sentence, cursor);
-    if (idx >= 0) {
-      sentenceRanges.push([idx, idx + sentence.length]);
-      cursor = idx + sentence.length;
-    }
-  });
+
+  let sentenceRanges = [];
+  if (providedRanges && Array.isArray(providedRanges)) {
+    sentenceRanges = providedRanges.map((r) => [r.start, r.end]);
+  } else {
+    let cursor = 0;
+    sentences.forEach((sentence) => {
+      const idx = text.indexOf(sentence, cursor);
+      if (idx >= 0) {
+        sentenceRanges.push([idx, idx + sentence.length]);
+        cursor = idx + sentence.length;
+      } else {
+        sentenceRanges.push([cursor, cursor + sentence.length]);
+        cursor += sentence.length;
+      }
+    });
+  }
+
   const activeRange =
-    typeof activeSentenceIndex === "number" && activeSentenceIndex >= 0
+    typeof activeSentenceIndex === "number" &&
+    activeSentenceIndex >= 0 &&
+    activeSentenceIndex < sentenceRanges.length
       ? sentenceRanges[activeSentenceIndex]
       : null;
 
@@ -113,9 +125,8 @@ export const HighlightedText = ({
     while (
       j < text.length &&
       !(dateMap.has(j) || amountMap.has(j)) &&
-      (!!activeRange === !!activeRange) &&
-      (!!isActive ===
-        (activeRange && j >= activeRange[0] && j < activeRange[1]))
+      !!activeRange === !!activeRange &&
+      !!isActive === (activeRange && j >= activeRange[0] && j < activeRange[1])
     ) {
       const nextActive =
         activeRange && j >= activeRange[0] && j < activeRange[1];
