@@ -16,9 +16,37 @@ const normalizeBlocks = (blocks = []) => {
   }));
 };
 
+const isValidUri = (uri) => {
+  if (!uri || typeof uri !== "string") return false;
+  // Check for common URI patterns: file://, content://, http://, https://, or data:
+  return /^(file|content|http|https|data):/.test(uri) || uri.startsWith("/");
+};
+
 export const runOcrFromImage = async (image) => {
   if (!image?.uri) {
-    return { text: "", blocks: [] };
+    return {
+      text: "",
+      blocks: [],
+      meta: {
+        provider: "error",
+        error: "No image URI provided",
+        createdAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  if (!isValidUri(image.uri)) {
+    console.warn("Invalid image URI format:", image.uri);
+    return {
+      text: "",
+      blocks: [],
+      meta: {
+        sourceUri: image.uri,
+        provider: "error",
+        error: "Invalid image URI format",
+        createdAt: new Date().toISOString(),
+      },
+    };
   }
 
   if (recognizer?.recognize) {
