@@ -135,14 +135,20 @@ export default function App() {
 
   const handleExport = async () => {
     if (!activeDoc) return;
-    const summary = exportDocumentSummary(activeDoc);
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync({
-        message: summary,
-        mimeType: "text/plain",
-      });
-    } else {
-      console.log("Sharing not available:", summary);
+    try {
+      const summary = exportDocumentSummary(activeDoc);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync({
+          message: summary,
+          mimeType: "text/plain",
+        });
+      } else {
+        Alert.alert("Sharing unavailable", "Native sharing is not available.");
+        console.log("Sharing not available:", summary);
+      }
+    } catch (error) {
+      console.error("Error exporting summary:", error);
+      Alert.alert("Export failed", "Unable to share summary right now.");
     }
   };
 
@@ -152,61 +158,92 @@ export default function App() {
   };
 
   const handlePickImage = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== "granted") {
-      alert("Permission to access photos is required.");
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    });
-    if (!result.canceled) {
-      const image = result.assets?.[0];
-      const ocr = await runOcrFromImage(image);
-      if (ocr.meta?.provider === "stub") {
-        alert(
-          "OCR is not available in Expo Go.\n\n" +
-            "To use OCR features:\n" +
-            "1. Build a custom development client:\n" +
-            "   npx expo prebuild\n" +
-            "   npx expo run:ios (or run:android)\n\n" +
-            "2. Or manually type/paste text in the input field.\n\n" +
-            "The image was selected, but OCR text extraction requires native modules."
-        );
-        // Don't set the error message as text - let user type manually
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== "granted") {
+        alert("Permission to access photos is required.");
         return;
       }
-      setInputText(ocr.text);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      });
+      if (!result.canceled) {
+        const image = result.assets?.[0];
+        if (!image?.uri) {
+          alert("Invalid image selected. Please try again.");
+          return;
+        }
+        try {
+          const ocr = await runOcrFromImage(image);
+          if (ocr.meta?.provider === "stub") {
+            alert(
+              "OCR is not available in Expo Go.\n\n" +
+                "To use OCR features:\n" +
+                "1. Build a custom development client:\n" +
+                "   npx expo prebuild\n" +
+                "   npx expo run:ios (or run:android)\n\n" +
+                "2. Or manually type/paste text in the input field.\n\n" +
+                "The image was selected, but OCR text extraction requires native modules."
+            );
+            return;
+          }
+          setInputText(ocr.text || "");
+        } catch (ocrError) {
+          console.error("OCR error:", ocrError);
+          alert(
+            "Failed to extract text from image. Please try again or type manually."
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      alert("Failed to pick image. Please try again.");
     }
   };
 
   const handleCameraCapture = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== "granted") {
-      alert("Permission to access camera is required.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
-    if (!result.canceled) {
-      const image = result.assets?.[0];
-      const ocr = await runOcrFromImage(image);
-      if (ocr.meta?.provider === "stub") {
-        alert(
-          "OCR is not available in Expo Go.\n\n" +
-            "To use OCR features:\n" +
-            "1. Build a custom development client:\n" +
-            "   npx expo prebuild\n" +
-            "   npx expo run:ios (or run:android)\n\n" +
-            "2. Or manually type/paste text in the input field.\n\n" +
-            "The photo was captured, but OCR text extraction requires native modules."
-        );
-        // Don't set the error message as text - let user type manually
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== "granted") {
+        alert("Permission to access camera is required.");
         return;
       }
-      setInputText(ocr.text);
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+      if (!result.canceled) {
+        const image = result.assets?.[0];
+        if (!image?.uri) {
+          alert("Invalid image captured. Please try again.");
+          return;
+        }
+        try {
+          const ocr = await runOcrFromImage(image);
+          if (ocr.meta?.provider === "stub") {
+            alert(
+              "OCR is not available in Expo Go.\n\n" +
+                "To use OCR features:\n" +
+                "1. Build a custom development client:\n" +
+                "   npx expo prebuild\n" +
+                "   npx expo run:ios (or run:android)\n\n" +
+                "2. Or manually type/paste text in the input field.\n\n" +
+                "The photo was captured, but OCR text extraction requires native modules."
+            );
+            // Don't set the error message as text - let user type manually
+            return;
+          }
+          setInputText(ocr.text || "");
+        } catch (ocrError) {
+          console.error("OCR error:", ocrError);
+          alert(
+            "Failed to extract text from image. Please try again or type manually."
+          );
+        }
+      }
+    } catch (error) {
+      console.error("Error capturing image:", error);
+      alert("Failed to capture image. Please try again.");
     }
   };
 
@@ -222,8 +259,28 @@ export default function App() {
   useEffect(() => {
     if (activeDoc && focusMode) {
       setFocusLineIndex(0);
+    } else if (!activeDoc) {
+      setFocusLineIndex(0);
     }
   }, [activeDoc, focusMode]);
+
+  // Validate focusLineIndex bounds when activeSentences change
+  useEffect(() => {
+    if (focusMode && activeSentences.length > 0) {
+      if (focusLineIndex >= activeSentences.length) {
+        setFocusLineIndex(0);
+      }
+    } else if (focusMode && activeSentences.length === 0) {
+      setFocusLineIndex(0);
+    }
+  }, [activeSentences, focusMode, focusLineIndex]);
+
+  useEffect(() => {
+    // Clamp focus line index to available sentences to avoid out-of-bounds
+    if (focusMode && focusLineIndex >= activeSentences.length) {
+      setFocusLineIndex(0);
+    }
+  }, [focusMode, focusLineIndex, activeSentences.length]);
 
   const overlayStyle = {
     padding: 12,
@@ -477,6 +534,11 @@ export default function App() {
                     amounts={activeDoc.highlights?.amounts}
                     sentences={activeSentences}
                     activeSentenceIndex={ttsState.sentenceIndex}
+                    sentenceRanges={
+                      viewMode === "original" && activeDoc.sentenceRanges
+                        ? activeDoc.sentenceRanges
+                        : null
+                    }
                     highContrast={highContrast}
                     style={{
                       fontSize: fontScale,
@@ -617,8 +679,16 @@ export default function App() {
                     marginLeft: 8,
                   }}
                   onPress={async () => {
-                    await Clipboard.setStringAsync(answer);
-                    Alert.alert("Copied", "Answer copied to clipboard!");
+                    try {
+                      await Clipboard.setStringAsync(answer);
+                      Alert.alert("Copied", "Answer copied to clipboard!");
+                    } catch (err) {
+                      console.error("Clipboard error", err);
+                      Alert.alert(
+                        "Copy failed",
+                        "Could not copy to clipboard. Please try again."
+                      );
+                    }
                   }}
                 >
                   <Text style={{ fontSize: 12, fontWeight: "600" }}>Copy</Text>
