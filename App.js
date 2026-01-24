@@ -6,7 +6,6 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -29,6 +28,8 @@ import {
   exportDocumentSummary,
   deleteDocument,
   clearAllDocuments,
+  getOfflineMode,
+  setOfflineMode,
 } from "./src/utils/storage";
 import * as Sharing from "expo-sharing";
 
@@ -62,7 +63,7 @@ export default function App() {
   const [selectedFont, setSelectedFont] = useState("atkinson");
   const [focusMode, setFocusMode] = useState(false);
   const [focusLineIndex, setFocusLineIndex] = useState(0);
-  const [offlineMode, setOfflineMode] = useState(true);
+  const [offlineMode, setOfflineModeState] = useState(true);
   const [ttsRate, setTtsRate] = useState(1.0);
   const {
     activeDoc,
@@ -87,10 +88,8 @@ export default function App() {
     }
     setProcessing(true);
     try {
-      console.log("Processing text:", inputText.substring(0, 50));
       const doc = await processDocument(inputText);
       if (doc) {
-        console.log("Document processed successfully:", doc.id);
         setAnswer("");
       } else {
         alert("Failed to process document. Check console for errors.");
@@ -144,7 +143,6 @@ export default function App() {
         });
       } else {
         Alert.alert("Sharing unavailable", "Native sharing is not available.");
-        console.log("Sharing not available:", summary);
       }
     } catch (error) {
       console.error("Error exporting summary:", error);
@@ -256,31 +254,23 @@ export default function App() {
       : splitSentences(activeDoc.rawText);
   }, [activeDoc, viewMode]);
 
+  // Reset focus line index when document or focus mode changes
   useEffect(() => {
-    if (activeDoc && focusMode) {
+    if (focusMode && activeDoc) {
       setFocusLineIndex(0);
     } else if (!activeDoc) {
       setFocusLineIndex(0);
     }
-  }, [activeDoc, focusMode]);
+  }, [activeDoc?.id, focusMode]); // Only depend on doc ID, not entire object
 
   // Validate focusLineIndex bounds when activeSentences change
   useEffect(() => {
-    if (focusMode && activeSentences.length > 0) {
-      if (focusLineIndex >= activeSentences.length) {
-        setFocusLineIndex(0);
-      }
+    if (focusMode && activeSentences.length > 0 && focusLineIndex >= activeSentences.length) {
+      setFocusLineIndex(0);
     } else if (focusMode && activeSentences.length === 0) {
       setFocusLineIndex(0);
     }
-  }, [activeSentences, focusMode, focusLineIndex]);
-
-  useEffect(() => {
-    // Clamp focus line index to available sentences to avoid out-of-bounds
-    if (focusMode && focusLineIndex >= activeSentences.length) {
-      setFocusLineIndex(0);
-    }
-  }, [focusMode, focusLineIndex, activeSentences.length]);
+  }, [activeSentences.length, focusMode, focusLineIndex]);
 
   const overlayStyle = {
     padding: 12,
@@ -320,29 +310,7 @@ export default function App() {
               Offline-friendly by design.
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ fontSize: 12, color: "#6b7280" }}>Offline</Text>
-            <Switch
-              value={offlineMode}
-              onValueChange={setOfflineMode}
-              trackColor={{ false: "#d1d5db", true: "#10b981" }}
-            />
-          </View>
         </View>
-        {!offlineMode && (
-          <View
-            style={{
-              backgroundColor: "#fef3c7",
-              padding: 10,
-              borderRadius: 8,
-              marginBottom: 12,
-            }}
-          >
-            <Text style={{ fontSize: 12, color: "#92400e" }}>
-              ⚠️ Cloud mode enabled. Data may be sent to external services.
-            </Text>
-          </View>
-        )}
 
         <View style={[styles.card, highContrast && styles.cardHighContrast]}>
           <Text
