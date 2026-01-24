@@ -96,7 +96,6 @@ const ABBREVIATIONS = new Set([
   "ed",
   "am",
   "pm",
-  "etc",
   "e.g",
   "i.e",
   "cf",
@@ -113,40 +112,85 @@ const isAbbreviation = (word) => {
   return ABBREVIATIONS.has(lower);
 };
 
+/**
+ * Splits text into sentences with position tracking for efficient range calculation.
+ * 
+ * Algorithm:
+ * 1. Iterates through text character by character
+ * 2. Detects sentence endings (. ! ?) that are NOT:
+ *    - Abbreviations (Dr., Mr., etc.)
+ *    - Decimal numbers (3.14)
+ * 3. Validates sentence boundary by checking next non-whitespace character
+ * 4. Returns sentences with their start positions for efficient range calculation
+ * 
+ * @param {string} text - Text to split into sentences
+ * @returns {Array<{text: string, start: number, end: number}>} Array of sentence objects with positions
+ */
 export const splitSentences = (text) => {
   if (!text) return [];
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  
   // Split on sentence endings followed by space and capital letter/number
   // Compatible with React Native/Hermes (no lookbehind)
+  // Optimized: Track positions during split to avoid expensive indexOf searches
   const sentences = [];
   let current = "";
-  for (let i = 0; i < text.length; i++) {
-    current += text[i];
-    if (/[.!?]/.test(text[i])) {
+  let sentenceStart = 0;
+  
+  // Find first non-whitespace in original text for accurate positioning
+  let originalIndex = 0;
+  while (originalIndex < text.length && /\s/.test(text[originalIndex])) {
+    originalIndex++;
+  }
+  sentenceStart = originalIndex;
+  
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    current += char;
+    
+    if (/[.!?]/.test(char)) {
       // Check if this is likely an abbreviation (short word before punctuation)
       const beforePunct = current.trim().split(/\s+/).pop() || "";
       const isAbbrev = isAbbreviation(beforePunct);
 
       const isDecimal =
-        /\./.test(text[i]) &&
+        /\./.test(char) &&
         i > 0 &&
-        /\d/.test(text[i - 1]) &&
-        i < text.length - 1 &&
-        /\d/.test(text[i + 1]);
+        /\d/.test(trimmed[i - 1]) &&
+        i < trimmed.length - 1 &&
+        /\d/.test(trimmed[i + 1]);
 
       // Only split if not abbreviation and not decimal
       if (!isAbbrev && !isDecimal) {
         // Check if next non-whitespace is capital letter or number
         let j = i + 1;
-        while (j < text.length && /\s/.test(text[j])) j++;
-        if (j >= text.length || /[A-Z0-9]/.test(text[j])) {
-          sentences.push(current.trim());
+        while (j < trimmed.length && /\s/.test(trimmed[j])) j++;
+        if (j >= trimmed.length || /[A-Z0-9]/.test(trimmed[j])) {
+          const sentenceText = current.trim();
+          if (sentenceText) {
+            const start = sentenceStart;
+            const end = start + sentenceText.length;
+            sentences.push({ text: sentenceText, start, end });
+            sentenceStart = end;
+            while (sentenceStart < text.length && /\s/.test(text[sentenceStart])) {
+              sentenceStart++;
+            }
+          }
           current = "";
         }
       }
     }
   }
-  if (current.trim()) sentences.push(current.trim());
-  return sentences.length > 0 ? sentences : [text.trim()].filter(Boolean);
+  
+  if (current.trim()) {
+    const sentenceText = current.trim();
+    const start = sentenceStart;
+    const end = start + sentenceText.length;
+    sentences.push({ text: sentenceText, start, end });
+  }
+  
+  return sentences.length > 0 ? sentences : [{ text: trimmed, start: 0, end: trimmed.length }];
 };
 
 export const extractKeySpans = (text) => {
@@ -167,16 +211,19 @@ export const extractKeySpans = (text) => {
 export const summarizeText = (text, sentences = []) => {
   if (!text) return "";
   if (sentences.length > 0) {
-    return sentences.slice(0, 2).join(" ").trim();
+    const sentenceTexts = sentences.map(s => typeof s === 'string' ? s : s.text);
+    return sentenceTexts.slice(0, 2).join(" ").trim();
   }
   return text.split(/\s+/).slice(0, 40).join(" ").trim();
 };
 
 export const simplifyText = (text, sentences = []) => {
   if (!text) return "";
-  const simpleSentences = (
-    sentences.length ? sentences : splitSentences(text)
-  ).map((s) =>
+  const sentenceTexts = sentences.length 
+    ? sentences.map(s => typeof s === 'string' ? s : s.text)
+    : splitSentences(text).map(s => s.text);
+    
+  const simpleSentences = sentenceTexts.map((s) =>
     s
       .replace(/[,;]/g, ".")
       .replace(
@@ -375,22 +422,12 @@ export const detectStructure = (text) => {
 
 export const buildDocument = (text) => {
   const cleaned = text.trim();
-  const sentences = splitSentences(cleaned);
-
-  // Calculate sentence ranges for accurate highlighting
-  const sentenceRanges = [];
-  let cursor = 0;
-  sentences.forEach((sentence) => {
-    const idx = cleaned.indexOf(sentence, cursor);
-    if (idx >= 0) {
-      sentenceRanges.push({ start: idx, end: idx + sentence.length });
-      cursor = idx + sentence.length;
-    } else {
-      // Fallback if sentence not found at expected position
-      sentenceRanges.push({ start: cursor, end: cursor + sentence.length });
-      cursor += sentence.length;
-    }
-  });
+  // Optimized: splitSentences now returns positions, eliminating need for indexOf searches
+  const sentenceData = splitSentences(cleaned);
+  
+  // Extract sentences and ranges efficiently
+  const sentences = sentenceData.map(s => s.text);
+  const sentenceRanges = sentenceData.map(s => ({ start: s.start, end: s.end }));
 
   const sentenceMeta = sentences.map((sentence, idx) => {
     const tokens = tokenize(sentence);

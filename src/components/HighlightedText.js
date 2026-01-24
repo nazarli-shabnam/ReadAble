@@ -124,9 +124,7 @@ export const HighlightedText = ({
     // Coalesce consecutive characters with same active state
     while (
       j < text.length &&
-      !(dateMap.has(j) || amountMap.has(j)) &&
-      !!activeRange === !!activeRange &&
-      !!isActive === (activeRange && j >= activeRange[0] && j < activeRange[1])
+      !(dateMap.has(j) || amountMap.has(j))
     ) {
       const nextActive =
         activeRange && j >= activeRange[0] && j < activeRange[1];
