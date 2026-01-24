@@ -1,3 +1,5 @@
+import { warn } from "./logger";
+
 let recognizer;
 try {
   recognizer = require("@react-native-ml-kit/text-recognition").default;
@@ -36,7 +38,7 @@ export const runOcrFromImage = async (image) => {
   }
 
   if (!isValidUri(image.uri)) {
-    console.warn("Invalid image URI format:", image.uri);
+    warn("Invalid image URI format:", image.uri);
     return {
       text: "",
       blocks: [],
@@ -64,7 +66,7 @@ export const runOcrFromImage = async (image) => {
         },
       };
     } catch (err) {
-      console.warn("OCR failed, falling back to stub:", err);
+      warn("OCR failed, falling back to stub:", err);
     }
   }
 

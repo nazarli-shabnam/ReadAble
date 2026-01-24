@@ -6,6 +6,7 @@ import {
   splitSentences,
 } from "../utils/textProcessing";
 import { loadDocuments, saveDocument } from "../utils/storage";
+import { log, warn, error } from "../utils/logger";
 
 export const useDocumentProcessor = () => {
   const [history, setHistory] = useState([]);
@@ -67,15 +68,15 @@ export const useDocumentProcessor = () => {
   const processDocument = useCallback(async (text) => {
     try {
       if (!text || !text.trim()) {
-        console.warn("processDocument: Empty text provided");
+        warn("processDocument: Empty text provided");
         return null;
       }
       const doc = buildDocument(text);
       if (!doc || !doc.rawText) {
-        console.error("processDocument: Failed to build document", doc);
+        error("processDocument: Failed to build document", doc);
         return null;
       }
-      console.log("processDocument: Document created", {
+      log("processDocument: Document created", {
         id: doc.id,
         sentences: doc.sentences?.length,
         summary: doc.summary?.substring(0, 50),
@@ -86,7 +87,7 @@ export const useDocumentProcessor = () => {
       setHistory(updated);
       return doc;
     } catch (error) {
-      console.error("processDocument error:", error);
+      error("processDocument error:", error);
       throw error;
     }
   }, []);

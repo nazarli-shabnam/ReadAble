@@ -6,6 +6,7 @@ import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -32,6 +33,7 @@ import {
   setOfflineMode,
 } from "./src/utils/storage";
 import * as Sharing from "expo-sharing";
+import { error } from "./src/utils/logger";
 
 const toRgba = (hex, opacity) => {
   if (!hex?.startsWith("#") || hex.length !== 7) return hex;
@@ -95,7 +97,7 @@ export default function App() {
         alert("Failed to process document. Check console for errors.");
       }
     } catch (error) {
-      console.error("Error in handleProcess:", error);
+      error("Error in handleProcess:", error);
       alert("Error processing document: " + error.message);
     } finally {
       setProcessing(false);
@@ -117,7 +119,7 @@ export default function App() {
       setAnswerConfidence(result.confidence || 0);
       setAnswerSource(result.source || null);
     } catch (error) {
-      console.error("Error in handleQuestion:", error);
+      error("Error in handleQuestion:", error);
       alert("Error getting answer: " + error.message);
     }
   };
@@ -145,7 +147,7 @@ export default function App() {
         Alert.alert("Sharing unavailable", "Native sharing is not available.");
       }
     } catch (error) {
-      console.error("Error exporting summary:", error);
+      error("Error exporting summary:", error);
       Alert.alert("Export failed", "Unable to share summary right now.");
     }
   };
@@ -187,14 +189,14 @@ export default function App() {
           }
           setInputText(ocr.text || "");
         } catch (ocrError) {
-          console.error("OCR error:", ocrError);
+          error("OCR error:", ocrError);
           alert(
             "Failed to extract text from image. Please try again or type manually."
           );
         }
       }
     } catch (error) {
-      console.error("Error picking image:", error);
+      error("Error picking image:", error);
       alert("Failed to pick image. Please try again.");
     }
   };
@@ -233,25 +235,36 @@ export default function App() {
           }
           setInputText(ocr.text || "");
         } catch (ocrError) {
-          console.error("OCR error:", ocrError);
+          error("OCR error:", ocrError);
           alert(
             "Failed to extract text from image. Please try again or type manually."
           );
         }
       }
     } catch (error) {
-      console.error("Error capturing image:", error);
+      error("Error capturing image:", error);
       alert("Failed to capture image. Please try again.");
     }
   };
 
+  // Load offline mode preference on mount
+  useEffect(() => {
+    const loadOfflineMode = async () => {
+      const saved = await getOfflineMode();
+      setOfflineModeState(saved);
+    };
+    loadOfflineMode();
+  }, []);
+
   const activeSentences = useMemo(() => {
     if (!activeDoc) return [];
-    return viewMode === "simplified"
-      ? splitSentences(activeDoc.simplifiedText)
-      : activeDoc.sentences?.length
+    if (viewMode === "simplified") {
+      const sentences = splitSentences(activeDoc.simplifiedText);
+      return sentences.map(s => s.text); // Extract text from sentence objects
+    }
+    return activeDoc.sentences?.length
       ? activeDoc.sentences
-      : splitSentences(activeDoc.rawText);
+      : splitSentences(activeDoc.rawText).map(s => s.text);
   }, [activeDoc, viewMode]);
 
   // Reset focus line index when document or focus mode changes
@@ -265,12 +278,12 @@ export default function App() {
 
   // Validate focusLineIndex bounds when activeSentences change
   useEffect(() => {
-    if (focusMode && activeSentences.length > 0 && focusLineIndex >= activeSentences.length) {
-      setFocusLineIndex(0);
-    } else if (focusMode && activeSentences.length === 0) {
+    if (!focusMode) return;
+    if (activeSentences.length === 0 || focusLineIndex >= activeSentences.length) {
       setFocusLineIndex(0);
     }
-  }, [activeSentences.length, focusMode, focusLineIndex]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSentences.length, focusMode]); // focusLineIndex intentionally omitted to prevent loop
 
   const overlayStyle = {
     padding: 12,
@@ -310,7 +323,32 @@ export default function App() {
               Offline-friendly by design.
             </Text>
           </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ fontSize: 12, color: "#6b7280" }}>Offline</Text>
+            <Switch
+              value={offlineMode}
+              onValueChange={async (value) => {
+                setOfflineModeState(value);
+                await setOfflineMode(value);
+              }}
+              trackColor={{ false: "#d1d5db", true: "#10b981" }}
+            />
+          </View>
         </View>
+        {!offlineMode && (
+          <View
+            style={{
+              backgroundColor: "#fef3c7",
+              padding: 10,
+              borderRadius: 8,
+              marginBottom: 12,
+            }}
+          >
+            <Text style={{ fontSize: 12, color: "#92400e" }}>
+              ⚠️ Cloud mode enabled. Data may be sent to external services.
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.card, highContrast && styles.cardHighContrast]}>
           <Text
@@ -651,7 +689,7 @@ export default function App() {
                       await Clipboard.setStringAsync(answer);
                       Alert.alert("Copied", "Answer copied to clipboard!");
                     } catch (err) {
-                      console.error("Clipboard error", err);
+                      error("Clipboard error", err);
                       Alert.alert(
                         "Copy failed",
                         "Could not copy to clipboard. Please try again."
