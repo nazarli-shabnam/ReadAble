@@ -62,90 +62,92 @@ export const HighlightedText = ({
         ]
       : base;
 
-  const chunks = [];
-  let i = 0;
-  while (i < text.length) {
-    if (dateMap.has(i)) {
-      const value = dateMap.get(i);
-      const isActive = activeRange && i >= activeRange[0] && i < activeRange[1];
-      chunks.push(
-        <Text
-          key={`date-${i}`}
-          style={[
-            isActive ? getActiveStyle(style) : style,
-            highlightStyle,
-            { flexShrink: 0 },
-            highContrast
-              ? {
-                  backgroundColor: "#ffff00",
-                  color: "#000000",
-                  borderWidth: 1,
-                  borderColor: "#000000",
-                }
-              : { backgroundColor: "#fff3cd", color: "#8a6d3b" },
-          ]}
-        >
-          {value}
-        </Text>
-      );
-      i += value.length;
-      continue;
+  const boundaries = new Set([0, text.length]);
+  dateMap.forEach((_, index) => {
+    boundaries.add(index);
+    boundaries.add(index + dateMap.get(index).length);
+  });
+  amountMap.forEach((_, index) => {
+    boundaries.add(index);
+    boundaries.add(index + amountMap.get(index).length);
+  });
+  if (activeRange) {
+    boundaries.add(activeRange[0]);
+    boundaries.add(activeRange[1]);
+  }
+
+  const sortedBoundaries = Array.from(boundaries).sort((a, b) => a - b);
+
+  const segments = [];
+  for (let i = 0; i < sortedBoundaries.length - 1; i++) {
+    const start = sortedBoundaries[i];
+    const end = sortedBoundaries[i + 1];
+    const segmentText = text.substring(start, end);
+
+    if (!segmentText) continue;
+
+    let segmentStyle = style;
+    let isHighlight = false;
+    let highlightType = null;
+
+    if (dateMap.has(start)) {
+      isHighlight = true;
+      highlightType = "date";
+      segmentStyle = [
+        activeRange && start >= activeRange[0] && start < activeRange[1]
+          ? getActiveStyle(style)
+          : style,
+        highlightStyle,
+        { flexShrink: 0 },
+        highContrast
+          ? {
+              backgroundColor: "#ffff00",
+              color: "#000000",
+              borderWidth: 1,
+              borderColor: "#000000",
+            }
+          : { backgroundColor: "#fff3cd", color: "#8a6d3b" },
+      ];
     }
-    if (amountMap.has(i)) {
-      const value = amountMap.get(i);
-      const isActive = activeRange && i >= activeRange[0] && i < activeRange[1];
-      chunks.push(
-        <Text
-          key={`amt-${i}`}
-          style={[
-            isActive ? getActiveStyle(style) : style,
-            highlightStyle,
-            { flexShrink: 0 },
-            highContrast
-              ? {
-                  backgroundColor: "#00ff00",
-                  color: "#000000",
-                  borderWidth: 1,
-                  borderColor: "#000000",
-                }
-              : { backgroundColor: "#e0f7f1", color: "#0f5132" },
-          ]}
-        >
-          {value}
-        </Text>
-      );
-      i += value.length;
-      continue;
+    else if (amountMap.has(start)) {
+      isHighlight = true;
+      highlightType = "amount";
+      segmentStyle = [
+        activeRange && start >= activeRange[0] && start < activeRange[1]
+          ? getActiveStyle(style)
+          : style,
+        highlightStyle,
+        { flexShrink: 0 },
+        highContrast
+          ? {
+              backgroundColor: "#00ff00",
+              color: "#000000",
+              borderWidth: 1,
+              borderColor: "#000000",
+            }
+          : { backgroundColor: "#e0f7f1", color: "#0f5132" },
+      ];
+    }
+    else {
+      const isActive =
+        activeRange && start >= activeRange[0] && end <= activeRange[1];
+      segmentStyle = isActive ? getActiveStyle(style) : style;
     }
 
-    const isActive = activeRange && i >= activeRange[0] && i < activeRange[1];
-    let chunkText = text[i];
-    let j = i + 1;
-    // Coalesce consecutive characters with same active state
-    while (
-      j < text.length &&
-      !(dateMap.has(j) || amountMap.has(j))
-    ) {
-      const nextActive =
-        activeRange && j >= activeRange[0] && j < activeRange[1];
-      if (nextActive !== isActive) break;
-      chunkText += text[j];
-      j += 1;
-    }
-    chunks.push(
-      <Text
-        key={`char-${i}`}
-        style={[isActive ? getActiveStyle(style) : style, { flexShrink: 0 }]}
-      >
-        {chunkText}
-      </Text>
-    );
-    i = j;
+    segments.push({
+      text: segmentText,
+      style: segmentStyle,
+      key: `${isHighlight ? highlightType : "text"}-${start}`,
+    });
   }
 
   return (
     <Text style={style} allowFontScaling={true}>
-      {chunks}
+      {segments.map((segment) => (
+        <Text key={segment.key} style={segment.style}>
+          {segment.text}
+        </Text>
+      ))}
     </Text>
   );
 };
