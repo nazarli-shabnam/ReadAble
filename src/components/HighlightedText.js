@@ -64,12 +64,18 @@ export const HighlightedText = ({
 
   const boundaries = new Set([0, text.length]);
   dateMap.forEach((value, index) => {
-    boundaries.add(index);
-    boundaries.add(index + value.length);
+    if (index >= 0 && index < text.length) {
+      boundaries.add(index);
+      const end = Math.min(index + value.length, text.length);
+      boundaries.add(end);
+    }
   });
   amountMap.forEach((value, index) => {
-    boundaries.add(index);
-    boundaries.add(index + value.length);
+    if (index >= 0 && index < text.length) {
+      boundaries.add(index);
+      const end = Math.min(index + value.length, text.length);
+      boundaries.add(end);
+    }
   });
   if (activeRange) {
     // Ensure active range boundaries are within text bounds
