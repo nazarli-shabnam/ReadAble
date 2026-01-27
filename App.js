@@ -482,13 +482,23 @@ export default function App() {
                       style={{ flexDirection: "row", marginBottom: 8, gap: 8 }}
                     >
                       <TouchableOpacity
-                        style={styles.secondaryButton}
+                        style={[
+                          styles.secondaryButton,
+                          focusLineIndex === 0 && styles.buttonDisabled,
+                        ]}
                         onPress={() =>
                           setFocusLineIndex(Math.max(0, focusLineIndex - 1))
                         }
                         disabled={focusLineIndex === 0}
                       >
-                        <Text style={styles.secondaryButtonText}>↑ Prev</Text>
+                        <Text
+                          style={[
+                            styles.secondaryButtonText,
+                            focusLineIndex === 0 && styles.buttonDisabledText,
+                          ]}
+                        >
+                          ↑ Prev
+                        </Text>
                       </TouchableOpacity>
                       <Text
                         style={[
@@ -499,7 +509,11 @@ export default function App() {
                         Line {focusLineIndex + 1} of {activeSentences.length}
                       </Text>
                       <TouchableOpacity
-                        style={styles.secondaryButton}
+                        style={[
+                          styles.secondaryButton,
+                          focusLineIndex >= activeSentences.length - 1 &&
+                            styles.buttonDisabled,
+                        ]}
                         onPress={() =>
                           setFocusLineIndex(
                             Math.min(
@@ -510,7 +524,15 @@ export default function App() {
                         }
                         disabled={focusLineIndex >= activeSentences.length - 1}
                       >
-                        <Text style={styles.secondaryButtonText}>Next ↓</Text>
+                        <Text
+                          style={[
+                            styles.secondaryButtonText,
+                            focusLineIndex >= activeSentences.length - 1 &&
+                              styles.buttonDisabledText,
+                          ]}
+                        >
+                          Next ↓
+                        </Text>
                       </TouchableOpacity>
                     </View>
                     <HighlightedText
@@ -999,7 +1021,11 @@ const styles = StyleSheet.create({
   buttonText: { color: "#fff", fontWeight: "700" },
   buttonDisabled: {
     backgroundColor: "#9ca3af",
-    opacity: 0.6,
+    opacity: 0.5,
+  },
+  buttonDisabledText: {
+    color: "#6b7280",
+    opacity: 0.7,
   },
   secondaryButton: {
     backgroundColor: "#e5e7eb",
