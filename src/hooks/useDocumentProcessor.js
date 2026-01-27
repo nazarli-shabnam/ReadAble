@@ -12,6 +12,7 @@ export const useDocumentProcessor = () => {
   const [history, setHistory] = useState([]);
   const [activeDoc, setActiveDoc] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [historyError, setHistoryError] = useState(null);
   const [ttsState, setTtsState] = useState({
     speaking: false,
     paused: false,
@@ -28,12 +29,19 @@ export const useDocumentProcessor = () => {
 
   useEffect(() => {
     const load = async () => {
-      const docs = await loadDocuments();
-      setHistory(docs);
-      if (docs.length > 0) {
-        setActiveDoc(docs[0]);
+      try {
+        setHistoryError(null);
+        const docs = await loadDocuments();
+        setHistory(docs);
+        if (docs.length > 0) {
+          setActiveDoc(docs[0]);
+        }
+        setLoading(false);
+      } catch (err) {
+        warn("Failed to load documents:", err);
+        setHistoryError("Failed to load document history. Please try again.");
+        setLoading(false);
       }
-      setLoading(false);
     };
     load();
     return () => {
@@ -102,12 +110,35 @@ export const useDocumentProcessor = () => {
   }, []);
 
   const refreshDocuments = useCallback(async () => {
-    const docs = await loadDocuments();
-    setHistory(docs);
-    if (activeDoc && !docs.find((d) => d.id === activeDoc.id)) {
-      setActiveDoc(docs[0] || null);
+    try {
+      setHistoryError(null);
+      const docs = await loadDocuments();
+      setHistory(docs);
+      if (activeDoc && !docs.find((d) => d.id === activeDoc.id)) {
+        setActiveDoc(docs[0] || null);
+      }
+    } catch (err) {
+      warn("Failed to refresh documents:", err);
+      setHistoryError("Failed to refresh document history. Please try again.");
     }
   }, [activeDoc]);
+
+  const retryLoadHistory = useCallback(async () => {
+    try {
+      setHistoryError(null);
+      setLoading(true);
+      const docs = await loadDocuments();
+      setHistory(docs);
+      if (docs.length > 0) {
+        setActiveDoc(docs[0]);
+      }
+      setLoading(false);
+    } catch (err) {
+      warn("Failed to retry load documents:", err);
+      setHistoryError("Failed to load document history. Storage may be corrupted.");
+      setLoading(false);
+    }
+  }, []);
 
   const runQuestion = useCallback(
     (question) => {
@@ -291,9 +322,11 @@ export const useDocumentProcessor = () => {
     activeDoc,
     history,
     loading,
+    historyError,
     processDocument,
     loadDocument,
     refreshDocuments,
+    retryLoadHistory,
     runQuestion,
     speak,
     pauseSpeaking,

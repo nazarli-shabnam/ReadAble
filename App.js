@@ -73,9 +73,11 @@ export default function App() {
     activeDoc,
     history,
     loading,
+    historyError,
     processDocument,
     loadDocument,
     refreshDocuments,
+    retryLoadHistory,
     runQuestion,
     speak,
     pauseSpeaking,
@@ -866,6 +868,30 @@ export default function App() {
           )}
           {loading ? (
             <ActivityIndicator style={{ marginTop: 12 }} />
+          ) : historyError ? (
+            <View style={{ marginTop: 12, padding: 12, backgroundColor: "#fee2e2", borderRadius: 8 }}>
+              <Text style={{ color: "#dc2626", marginBottom: 8, fontWeight: "600" }}>
+                ⚠️ {historyError}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.button, { flex: 1 }]}
+                  onPress={retryLoadHistory}
+                >
+                  <Text style={styles.buttonText}>Retry</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.secondaryButton, { flex: 1 }]}
+                  onPress={async () => {
+                    await clearAllDocuments();
+                    await refreshDocuments();
+                    Alert.alert("Success", "Storage cleared. History will be empty.");
+                  }}
+                >
+                  <Text style={styles.secondaryButtonText}>Clear Storage</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           ) : history.length > 0 ? (
             <View style={{ marginTop: 12, gap: 8 }}>
               {history.slice(0, 5).map((doc) => (
