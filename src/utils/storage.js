@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   DOCUMENTS: "@readable:documents",
   HISTORY: "@readable:history",
   OFFLINE_MODE: "@readable:offlineMode",
+  TTS_RATE: "@readable:ttsRate",
 };
 
 const isValidDocument = (doc) => {
@@ -139,6 +140,39 @@ export const setOfflineMode = async (enabled) => {
     return true;
   } catch (err) {
     warn("Failed to save offline mode preference:", err);
+    return false;
+  }
+};
+
+// TTS rate persistence
+export const getTtsRate = async () => {
+  try {
+    const value = await AsyncStorage.getItem(STORAGE_KEYS.TTS_RATE);
+    if (value !== null) {
+      const rate = JSON.parse(value);
+      // Validate rate is between 0.5 and 2.0
+      if (typeof rate === 'number' && rate >= 0.5 && rate <= 2.0) {
+        return rate;
+      }
+    }
+    return 1.0; // Default rate
+  } catch (err) {
+    warn("Failed to load TTS rate preference:", err);
+    return 1.0; // Default rate
+  }
+};
+
+export const setTtsRate = async (rate) => {
+  try {
+    // Validate rate before saving
+    if (typeof rate !== 'number' || rate < 0.5 || rate > 2.0) {
+      warn("Invalid TTS rate value:", rate);
+      return false;
+    }
+    await AsyncStorage.setItem(STORAGE_KEYS.TTS_RATE, JSON.stringify(rate));
+    return true;
+  } catch (err) {
+    warn("Failed to save TTS rate preference:", err);
     return false;
   }
 };

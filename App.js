@@ -31,6 +31,8 @@ import {
   clearAllDocuments,
   getOfflineMode,
   setOfflineMode,
+  getTtsRate,
+  setTtsRate,
 } from "./src/utils/storage";
 import * as Sharing from "expo-sharing";
 import { error } from "./src/utils/logger";
@@ -247,13 +249,17 @@ export default function App() {
     }
   };
 
-  // Load offline mode preference on mount
+  // Load preferences on mount
   useEffect(() => {
-    const loadOfflineMode = async () => {
-      const saved = await getOfflineMode();
-      setOfflineModeState(saved);
+    const loadPreferences = async () => {
+      const [offlineMode, ttsRate] = await Promise.all([
+        getOfflineMode(),
+        getTtsRate(),
+      ]);
+      setOfflineModeState(offlineMode);
+      setTtsRate(ttsRate);
     };
-    loadOfflineMode();
+    loadPreferences();
   }, []);
 
   const activeSentences = useMemo(() => {
@@ -440,7 +446,10 @@ export default function App() {
             focusMode={focusMode}
             onToggleFocusMode={() => setFocusMode((v) => !v)}
             ttsRate={ttsRate}
-            onTtsRateChange={setTtsRate}
+            onTtsRateChange={async (rate) => {
+              setTtsRate(rate);
+              await setTtsRate(rate); // Persist to storage
+            }}
           />
           {activeDoc ? (
             <View>
