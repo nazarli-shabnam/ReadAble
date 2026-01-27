@@ -32,7 +32,7 @@ import {
   getOfflineMode,
   setOfflineMode,
   getTtsRate,
-  setTtsRate,
+  setTtsRate as saveTtsRate,
 } from "./src/utils/storage";
 import * as Sharing from "expo-sharing";
 import { error } from "./src/utils/logger";
@@ -449,8 +449,8 @@ export default function App() {
             onToggleFocusMode={() => setFocusMode((v) => !v)}
             ttsRate={ttsRate}
             onTtsRateChange={async (rate) => {
-              setTtsRate(rate);
-              await setTtsRate(rate); // Persist to storage
+              setTtsRate(rate); // Update state
+              await saveTtsRate(rate); // Persist to storage
             }}
           />
           {activeDoc ? (

@@ -63,17 +63,18 @@ export const HighlightedText = ({
       : base;
 
   const boundaries = new Set([0, text.length]);
-  dateMap.forEach((_, index) => {
+  dateMap.forEach((value, index) => {
     boundaries.add(index);
-    boundaries.add(index + dateMap.get(index).length);
+    boundaries.add(index + value.length);
   });
-  amountMap.forEach((_, index) => {
+  amountMap.forEach((value, index) => {
     boundaries.add(index);
-    boundaries.add(index + amountMap.get(index).length);
+    boundaries.add(index + value.length);
   });
   if (activeRange) {
-    boundaries.add(activeRange[0]);
-    boundaries.add(activeRange[1]);
+    // Ensure active range boundaries are within text bounds
+    boundaries.add(Math.max(0, Math.min(activeRange[0], text.length)));
+    boundaries.add(Math.max(0, Math.min(activeRange[1], text.length)));
   }
 
   const sortedBoundaries = Array.from(boundaries).sort((a, b) => a - b);
