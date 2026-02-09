@@ -165,9 +165,12 @@ export const useDocumentProcessor = () => {
           : doc.sentences?.length
           ? doc.sentences
           : splitSentences(doc.rawText);
-      const segments = sentenceList.length
+      const rawSegments = sentenceList.length
         ? sentenceList
         : [mode === "simplified" ? doc.simplifiedText : doc.rawText];
+      const segments = rawSegments.map((s) =>
+        typeof s === "string" ? s : (s?.text ?? "")
+      );
 
       Speech.stop();
       isPausedRef.current = false;
@@ -207,17 +210,18 @@ export const useDocumentProcessor = () => {
           setCurrentSpeechId(null);
           return;
         }
+        const textToSpeak = typeof segment === "string" ? segment : (segment?.text ?? "");
         setTtsState({
           speaking: true,
           paused: false,
-          lastText: segment,
+          lastText: textToSpeak,
           sentenceIndex: idx,
           totalSentences: segments.length,
           segments,
         });
         sentenceIndexRef.current = idx;
 
-        const speechId = Speech.speak(segment, {
+        const speechId = Speech.speak(textToSpeak, {
           language: "en-US",
           rate: rate,
           onDone: () => {
