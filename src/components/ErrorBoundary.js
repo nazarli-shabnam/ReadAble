@@ -1,171 +1,63 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { error } from "../utils/logger";
+import { THEMES, ThemeContext } from "../theme";
+import { Button, Txt } from "./ui";
 
 /**
- * Error Boundary component for React Native
- * Catches JavaScript errors anywhere in the child component tree
- * and displays a fallback UI instead of crashing the app
+ * Catches render errors anywhere below it and shows a recoverable screen
+ * instead of a blank app.
  */
 class ErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+  state = { error: null };
+
+  static getDerivedStateFromError(err) {
+    return { error: err };
   }
 
-  static getDerivedStateFromError(error) {
-    // Update state so the next render will show the fallback UI
-    return { hasError: true };
+  componentDidCatch(err, errorInfo) {
+    // `err`, not `error`: the logger's `error` must not be shadowed here.
+    error("ErrorBoundary caught an error:", err, errorInfo);
   }
-
-  componentDidCatch(error, errorInfo) {
-    // Log error to logger (which respects production guards)
-    error("ErrorBoundary caught an error:", error, errorInfo);
-    
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    // You can also log the error to an error reporting service here
-    // if (errorReportingService) {
-    //   errorReportingService.logError(error, errorInfo);
-    // }
-  }
-
-  handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
-    if (this.props.onReset) {
-      this.props.onReset();
-    }
-  };
 
   render() {
-    if (this.state.hasError) {
-      // Custom fallback UI
-      if (this.props.fallback) {
-        return this.props.fallback(this.state.error, this.handleReset);
-      }
-
-      // Default fallback UI
-      return (
-        <ScrollView contentContainerStyle={styles.container}>
-          <View style={styles.errorContainer}>
-            <Text style={styles.title}>⚠️ Something went wrong</Text>
-            <Text style={styles.message}>
-              {this.props.message ||
-                "An unexpected error occurred. Please try again."}
-            </Text>
-            {__DEV__ && this.state.error && (
-              <View style={styles.detailsContainer}>
-                <Text style={styles.detailsTitle}>Error Details:</Text>
-                <Text style={styles.detailsText}>
-                  {this.state.error.toString()}
-                </Text>
-                {this.state.errorInfo && (
-                  <Text style={styles.detailsText}>
-                    {this.state.errorInfo.componentStack}
-                  </Text>
-                )}
-              </View>
+    if (!this.state.error) return this.props.children;
+    const t = THEMES.light;
+    return (
+      <ThemeContext.Provider value={t}>
+        <ScrollView contentContainerStyle={[styles.container, { backgroundColor: t.page }]}>
+          <View style={[styles.box, { backgroundColor: t.surface, borderColor: t.border }]}>
+            <Txt variant="heading" accessibilityRole="header">
+              Something went wrong
+            </Txt>
+            <Txt>{this.props.message || "An unexpected error occurred. Try again."}</Txt>
+            {__DEV__ && (
+              <Txt variant="caption" muted selectable>
+                {String(this.state.error)}
+              </Txt>
             )}
-            <TouchableOpacity
-              style={styles.button}
-              onPress={this.handleReset}
-            >
-              <Text style={styles.buttonText}>Try Again</Text>
-            </TouchableOpacity>
-            {this.props.showReload && (
-              <TouchableOpacity
-                style={[styles.button, styles.secondaryButton]}
-                onPress={() => {
-                  // Reload app - in React Native, this might require navigation reset
-                  if (this.props.onReload) {
-                    this.props.onReload();
-                  }
-                }}
-              >
-                <Text style={styles.secondaryButtonText}>Reload App</Text>
-              </TouchableOpacity>
-            )}
+            <Button
+              label="Try again"
+              variant="primary"
+              onPress={() => this.setState({ error: null })}
+            />
           </View>
         </ScrollView>
-      );
-    }
-
-    return this.props.children;
+      </ThemeContext.Provider>
+    );
   }
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f6f7fb",
+  container: { flexGrow: 1, padding: 20, justifyContent: "center" },
+  box: {
+    borderRadius: 16,
+    borderWidth: 1,
     padding: 20,
-  },
-  errorContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 40,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#dc2626",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  message: {
-    fontSize: 16,
-    color: "#374151",
-    marginBottom: 20,
-    textAlign: "center",
-    lineHeight: 24,
-  },
-  detailsContainer: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 20,
-  },
-  detailsTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  detailsText: {
-    fontSize: 12,
-    color: "#6b7280",
-    fontFamily: "monospace",
-    marginBottom: 4,
-  },
-  button: {
-    backgroundColor: "#111827",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginBottom: 12,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "700",
-    textAlign: "center",
-    fontSize: 16,
-  },
-  secondaryButton: {
-    backgroundColor: "#e5e7eb",
-  },
-  secondaryButtonText: {
-    color: "#111827",
-    fontWeight: "700",
-    textAlign: "center",
-    fontSize: 16,
+    gap: 14,
+    maxWidth: 560,
+    width: "100%",
+    alignSelf: "center",
   },
 });
 

@@ -1,85 +1,35 @@
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { warn } from "./logger";
+import { cleanOcrText } from "./ocrText";
 
 let recognizer;
 try {
   recognizer = require("@react-native-ml-kit/text-recognition").default;
-} catch (err) {
+} catch {
   recognizer = null;
 }
 
-const normalizeBlocks = (blocks = []) => {
-  return blocks.map((block) => ({
-    text: block.text,
-    boundingBox: block.bounding,
-    lines: block.lines?.map((line) => ({
-      text: line.text,
-      boundingBox: line.bounding,
-    })),
-  }));
-};
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
-const isValidUri = (uri) => {
-  if (!uri || typeof uri !== "string") return false;
-  // Check for common URI patterns: file://, content://, http://, https://, or data:
-  return /^(file|content|http|https|data):/.test(uri) || uri.startsWith("/");
-};
+export const OCR_UNAVAILABLE_MESSAGE = isExpoGo
+  ? "Reading text from photos isn't available in Expo Go. Build the app with `npx expo run:android` or `npx expo run:ios` to use it, or type or paste the text instead."
+  : "Reading text from photos isn't available on this device. Type or paste the text instead.";
 
+/**
+ * Recognises text in an image with ML Kit (Android) / Apple Vision (iOS).
+ * @returns {Promise<{status: "ok"|"empty"|"unavailable"|"error", text: string}>}
+ */
 export const runOcrFromImage = async (image) => {
-  if (!image?.uri) {
-    return {
-      text: "",
-      blocks: [],
-      meta: {
-        provider: "error",
-        error: "No image URI provided",
-        createdAt: new Date().toISOString(),
-      },
-    };
+  if (!image?.uri) return { status: "error", text: "" };
+  if (!recognizer?.recognize) return { status: "unavailable", text: "" };
+
+  try {
+    const result = await recognizer.recognize(image.uri);
+    const text = cleanOcrText((result?.blocks || []).map((b) => b.text));
+    return { status: text ? "ok" : "empty", text };
+  } catch (err) {
+    // A missing native module (e.g. Expo Go) throws here.
+    warn("OCR failed:", err);
+    return { status: isExpoGo ? "unavailable" : "error", text: "" };
   }
-
-  if (!isValidUri(image.uri)) {
-    warn("Invalid image URI format:", image.uri);
-    return {
-      text: "",
-      blocks: [],
-      meta: {
-        sourceUri: image.uri,
-        provider: "error",
-        error: "Invalid image URI format",
-        createdAt: new Date().toISOString(),
-      },
-    };
-  }
-
-  if (recognizer?.recognize) {
-    try {
-      const result = await recognizer.recognize(image.uri);
-      const blocks = normalizeBlocks(result?.blocks || []);
-      const text = blocks.map((b) => b.text).join("\n");
-      return {
-        text,
-        blocks,
-        meta: {
-          sourceUri: image.uri,
-          provider: "mlkit",
-          createdAt: new Date().toISOString(),
-        },
-      };
-    } catch (err) {
-      warn("OCR failed, falling back to stub:", err);
-    }
-  }
-
-  const placeholderText =
-    "OCR unavailable: install a Dev Client with ML Kit / Apple Vision and reopen the image.";
-
-  return {
-    text: placeholderText,
-    blocks: [],
-    meta: {
-      sourceUri: image.uri,
-      provider: "stub",
-      createdAt: new Date().toISOString(),
-    },
-  };
 };

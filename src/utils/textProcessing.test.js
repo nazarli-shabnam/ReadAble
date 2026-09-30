@@ -1,182 +1,288 @@
-/**
- * Unit tests for textProcessing utilities
- * 
- * To run tests:
- * 1. Install dependencies: corepack yarn install
- * 2. Run tests: corepack yarn test
- * 3. Watch mode: corepack yarn test:watch
- * 4. Coverage: corepack yarn test:coverage
- */
-
 import {
   splitSentences,
   tokenize,
+  findKeySpans,
   extractKeySpans,
   summarizeText,
   simplifyText,
+  answerQuestion,
   buildDocument,
 } from "./textProcessing";
+import { SAMPLE_TEXT } from "../constants/sampleText";
 
-describe("textProcessing utilities", () => {
-  describe("splitSentences", () => {
-    test("should split simple sentences", () => {
-      const text = "Hello world. This is a test. Another sentence!";
-      const result = splitSentences(text);
-      expect(result).toHaveLength(3);
-      expect(result[0].text).toBe("Hello world.");
-      expect(result[1].text).toBe("This is a test.");
-      expect(result[2].text).toBe("Another sentence!");
-    });
+const texts = (sentences) => sentences.map((s) => s.text);
 
-    test("should handle abbreviations", () => {
-      const text = "Dr. Smith went to the U.S.A. He was happy.";
-      const result = splitSentences(text);
-      // Should not split on Dr. or U.S.A.
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0].text).toContain("Dr.");
-    });
+describe("splitSentences", () => {
+  test("splits simple sentences", () => {
+    expect(texts(splitSentences("Hello world. This is a test. Another sentence!"))).toEqual([
+      "Hello world.",
+      "This is a test.",
+      "Another sentence!",
+    ]);
+  });
 
-    test("should handle decimal numbers", () => {
-      const text = "The price is $3.14. That's cheap!";
-      const result = splitSentences(text);
-      // Should not split on 3.14
-      expect(result.length).toBeGreaterThan(0);
-    });
+  test("does not split after titles, initials or acronyms", () => {
+    expect(texts(splitSentences("Dr. Smith met J. K. Rowling. They talked."))).toEqual([
+      "Dr. Smith met J. K. Rowling.",
+      "They talked.",
+    ]);
+    expect(splitSentences("He lives in the U.S.A. now.")).toHaveLength(1);
+  });
 
-    test("should return empty array for empty text", () => {
-      expect(splitSentences("")).toEqual([]);
-      expect(splitSentences(null)).toEqual([]);
-      expect(splitSentences(undefined)).toEqual([]);
-    });
+  test("splits after am/pm and etc. at the end of a sentence", () => {
+    expect(texts(splitSentences("Doors open at 6:00 PM. Bring a pen, paper, etc. Be early."))).toEqual([
+      "Doors open at 6:00 PM.",
+      "Bring a pen, paper, etc.",
+      "Be early.",
+    ]);
+  });
 
-    test("should include position information", () => {
-      const text = "First. Second!";
-      const result = splitSentences(text);
-      expect(result[0]).toHaveProperty("start");
-      expect(result[0]).toHaveProperty("end");
-      expect(result[0].start).toBeGreaterThanOrEqual(0);
-      expect(result[0].end).toBeGreaterThan(result[0].start);
+  test("keeps numbering abbreviations with their number", () => {
+    expect(splitSentences("See No. 5 on the list.")).toHaveLength(1);
+  });
+
+  test("does not split decimals or emails", () => {
+    expect(texts(splitSentences("The price is $3.14. Email a@b.com today."))).toEqual([
+      "The price is $3.14.",
+      "Email a@b.com today.",
+    ]);
+  });
+
+  test("handles closing quotes and ? / !", () => {
+    expect(texts(splitSentences('He said "Stop!" Then he left. No? Yes.'))).toEqual([
+      'He said "Stop!"',
+      "Then he left.",
+      "No?",
+      "Yes.",
+    ]);
+  });
+
+  test("blank lines and bullet lines start new sentences", () => {
+    expect(texts(splitSentences("Reminder\n\nThe library closes\n- item one\n- item two"))).toEqual([
+      "Reminder",
+      "The library closes",
+      "- item one",
+      "- item two",
+    ]);
+  });
+
+  test("positions map back to the original text", () => {
+    const text = "  First one.   Second one!\nThird.";
+    splitSentences(text).forEach((s) => {
+      expect(text.slice(s.start, s.end)).toBe(s.text);
     });
   });
 
-  describe("tokenize", () => {
-    test("should tokenize text correctly", () => {
-      const text = "Hello world test";
-      const result = tokenize(text);
-      expect(result).toContain("hello");
-      expect(result).toContain("world");
-      expect(result).toContain("test");
-    });
+  test("returns [] for empty input", () => {
+    expect(splitSentences("")).toEqual([]);
+    expect(splitSentences("   ")).toEqual([]);
+    expect(splitSentences(null)).toEqual([]);
+    expect(splitSentences(undefined)).toEqual([]);
+  });
+});
 
-    test("should filter short words", () => {
-      const text = "a an it hello";
-      const result = tokenize(text);
-      expect(result).not.toContain("a");
-      expect(result).not.toContain("an");
-      expect(result).not.toContain("it");
-      expect(result).toContain("hello");
-    });
-
-    test("should handle empty text", () => {
-      expect(tokenize("")).toEqual([]);
-      expect(tokenize(null)).toEqual([]);
-    });
+describe("tokenize", () => {
+  test("lowercases, drops short words, stems plurals", () => {
+    expect(tokenize("Late FEES and dates apply to a policy")).toEqual([
+      "late",
+      "fee",
+      "and",
+      "date",
+      "apply",
+      "policy",
+    ]);
+    expect(tokenize("libraries boxes class")).toEqual(["library", "box", "class"]);
   });
 
-  describe("extractKeySpans", () => {
-    test("should extract dates", () => {
-      const text = "The meeting is on January 15, 2024.";
-      const result = extractKeySpans(text);
-      expect(result.dates.length).toBeGreaterThan(0);
-      expect(result.dates[0].value).toContain("January");
-    });
+  test("handles empty input", () => {
+    expect(tokenize("")).toEqual([]);
+    expect(tokenize(null)).toEqual([]);
+  });
+});
 
-    test("should extract amounts", () => {
-      const text = "The price is $100.50.";
-      const result = extractKeySpans(text);
-      expect(result.amounts.length).toBeGreaterThan(0);
-      expect(result.amounts[0].value).toContain("100");
-    });
+describe("findKeySpans", () => {
+  const values = (text) => findKeySpans(text).map((s) => `${s.type}:${s.value}`);
 
-    test("should return empty arrays for text without dates or amounts", () => {
-      const text = "This is just regular text.";
-      const result = extractKeySpans(text);
-      expect(result.dates).toEqual([]);
-      expect(result.amounts).toEqual([]);
-    });
+  test("finds exactly the dates, times and amounts in the sample", () => {
+    expect(values(SAMPLE_TEXT)).toEqual([
+      "date:March 12, 2025",
+      "date:6:00 PM",
+      "amount:12$",
+      "date:5:00 PM",
+      "date:March 10, 2025",
+    ]);
   });
 
-  describe("summarizeText", () => {
-    test("should summarize using first sentences", () => {
-      // summarizeText requires non-empty text when sentences are provided
-      const text = "Full text content here.";
-      const sentences = ["First sentence.", "Second sentence.", "Third sentence."];
-      const result = summarizeText(text, sentences);
-      expect(result).toContain("First sentence");
-      expect(result).toContain("Second sentence");
-      
-      // Also test with sentence objects
-      const sentenceObjects = [
-        { text: "First sentence.", start: 0, end: 16 },
-        { text: "Second sentence.", start: 17, end: 33 },
-      ];
-      const result2 = summarizeText(text, sentenceObjects);
-      expect(result2).toContain("First sentence");
-      expect(result2).toContain("Second sentence");
-    });
-
-    test("should summarize using word count if no sentences", () => {
-      const text = "This is a test sentence with many words that should be truncated.";
-      const result = summarizeText(text);
-      expect(result.split(" ").length).toBeLessThanOrEqual(40);
-    });
+  test("recognises common money formats", () => {
+    expect(values("Pay $5, € 3.50, 1,000 USD, USD 20 or 10 dollars.")).toEqual([
+      "amount:$5",
+      "amount:€ 3.50",
+      "amount:1,000 USD",
+      "amount:USD 20",
+      "amount:10 dollars",
+    ]);
   });
 
-  describe("simplifyText", () => {
-    test("should remove complex connectors", () => {
-      const text = "However, this is a test. Furthermore, it works.";
-      const result = simplifyText(text);
-      expect(result).not.toContain("However");
-      expect(result).not.toContain("Furthermore");
-    });
-
-    test("should replace commas and semicolons with periods", () => {
-      const text = "First, second; third.";
-      const result = simplifyText(text);
-      expect(result).toContain(".");
-      expect(result.split(".").length).toBeGreaterThan(2);
-    });
+  test("ignores plain numbers and bare month names", () => {
+    expect(values("You may bring 3 friends in March. Room 12 is open.")).toEqual([]);
   });
 
-  describe("buildDocument", () => {
-    test("should build complete document structure", () => {
-      const text = "This is a test document. It has multiple sentences!";
-      const doc = buildDocument(text);
-      
-      expect(doc).toHaveProperty("id");
-      expect(doc).toHaveProperty("rawText");
-      expect(doc).toHaveProperty("sentences");
-      expect(doc).toHaveProperty("sentenceMeta");
-      expect(doc).toHaveProperty("sentenceRanges");
-      expect(doc).toHaveProperty("summary");
-      expect(doc).toHaveProperty("simplifiedText");
-      expect(doc).toHaveProperty("highlights");
-      expect(doc).toHaveProperty("structures");
-      expect(doc).toHaveProperty("createdAt");
-    });
+  test("recognises common date formats", () => {
+    expect(values("12 March 2025, Mar 2025, 2025-03-12, 12/03/2025, 5 pm, 7 p.m.")).toEqual([
+      "date:12 March 2025",
+      "date:Mar 2025",
+      "date:2025-03-12",
+      "date:12/03/2025",
+      "date:5 pm",
+      "date:7 p.m",
+    ]);
+  });
 
-    test("should generate unique IDs", () => {
-      const text = "Test";
-      const doc1 = buildDocument(text);
-      const doc2 = buildDocument(text);
-      expect(doc1.id).not.toBe(doc2.id);
+  test("spans index into the text", () => {
+    findKeySpans(SAMPLE_TEXT).forEach((s) => {
+      expect(SAMPLE_TEXT.slice(s.start, s.end)).toBe(s.value);
     });
+  });
+});
 
-    test("should match sentence count with ranges", () => {
-      const text = "First. Second! Third?";
-      const doc = buildDocument(text);
-      expect(doc.sentences.length).toBe(doc.sentenceRanges.length);
-      expect(doc.sentences.length).toBe(doc.sentenceMeta.length);
-    });
+describe("extractKeySpans", () => {
+  test("groups spans by type", () => {
+    const result = extractKeySpans("The meeting is on January 15, 2024 and costs $100.50.");
+    expect(result.dates).toEqual([{ value: "January 15, 2024", index: 18 }]);
+    expect(result.amounts).toEqual([{ value: "$100.50", index: 45 }]);
+  });
+
+  test("returns empty arrays for text without key info", () => {
+    expect(extractKeySpans("This is just regular text.")).toEqual({ dates: [], amounts: [] });
+  });
+});
+
+describe("summarizeText", () => {
+  test("returns short texts unchanged", () => {
+    expect(summarizeText("One. Two.")).toBe("One. Two.");
+  });
+
+  test("picks the most central sentences and keeps their order", () => {
+    const text = [
+      "The library is closing for repairs.",
+      "Pigeons like bread.",
+      "The library repairs start on March 12, 2025.",
+      "Weather was nice.",
+      "Library books are due before the repairs.",
+      "Cats sleep a lot.",
+    ].join(" ");
+    const summary = summarizeText(text);
+    expect(summary).toBe(
+      "The library is closing for repairs. The library repairs start on March 12, 2025. Library books are due before the repairs."
+    );
+  });
+
+  test("accepts sentence objects", () => {
+    expect(summarizeText("x", [{ text: "A b c." }, { text: "D e f." }])).toBe("A b c. D e f.");
+  });
+});
+
+describe("simplifyText", () => {
+  test("never produces double periods and keeps dates and numbers intact", () => {
+    const result = simplifyText(SAMPLE_TEXT);
+    expect(result).not.toMatch(/\.\./);
+    expect(result).toContain("March 12, 2025");
+    expect(simplifyText("We paid 1,000 dollars.")).toBe("We paid 1,000 dollars.");
+  });
+
+  test("removes filler connectives", () => {
+    expect(simplifyText("However, this is a test. Furthermore, it works.")).toBe(
+      "This is a test. It works."
+    );
+    expect(simplifyText("The fee, however, is due.")).toBe("The fee is due.");
+  });
+
+  test("swaps hard words for plain ones, keeping case", () => {
+    expect(simplifyText("Utilize the form prior to Monday in order to obtain assistance.")).toBe(
+      "Use the form before Monday to get help."
+    );
+  });
+
+  test("splits long sentences only where both parts are substantial", () => {
+    expect(
+      simplifyText(
+        "You can return your books at the front desk; the staff will check them in for you."
+      )
+    ).toBe("You can return your books at the front desk. The staff will check them in for you.");
+    expect(
+      simplifyText("Students can request an extension by email, but they must do it before Friday.")
+    ).toBe("Students can request an extension by email. But they must do it before Friday.");
+    expect(simplifyText("Red, and blue.")).toBe("Red, and blue.");
+  });
+
+  test("keeps paragraph breaks", () => {
+    expect(simplifyText("First part.\nSecond part")).toBe("First part.\nSecond part.");
+  });
+
+  test("handles empty input", () => {
+    expect(simplifyText("")).toBe("");
+  });
+});
+
+describe("answerQuestion", () => {
+  const doc = buildDocument(SAMPLE_TEXT);
+
+  test("finds the sentence about the due date", () => {
+    const result = answerQuestion("When is the due date?", doc);
+    expect(result.found).toBe(true);
+    expect(result.answer).toMatch(/^Late book fees/);
+    expect(result.source.sentenceIndex).toBe(1);
+  });
+
+  test("finds amounts for 'how much' questions", () => {
+    const result = answerQuestion("How much are late fees?", doc);
+    expect(result.answer).toMatch(/12\$/);
+    expect(result.confidence).toBeGreaterThan(50);
+  });
+
+  test("answers date questions with the dated sentence", () => {
+    expect(answerQuestion("When will the library close?", doc).answer).toMatch(/March 12/);
+    expect(answerQuestion("When can I request an extension?", doc).answer).toMatch(/March 10/);
+  });
+
+  test("gives the same answer when asked twice (no regex state leaks)", () => {
+    const first = answerQuestion("How much are late fees?", doc);
+    const second = answerQuestion("How much are late fees?", doc);
+    expect(second).toEqual(first);
+  });
+
+  test("reports not found for unrelated questions", () => {
+    expect(answerQuestion("Who is the president of France?", doc).found).toBe(false);
+    expect(answerQuestion("What?", doc).found).toBe(false);
+    expect(answerQuestion("", doc).found).toBe(false);
+  });
+});
+
+describe("buildDocument", () => {
+  test("builds all derived fields", () => {
+    const doc = buildDocument("This is a test document. It has multiple sentences!");
+    expect(doc.sentences).toEqual(["This is a test document.", "It has multiple sentences!"]);
+    expect(doc.sentenceMeta).toHaveLength(2);
+    expect(doc.sentenceMeta[1].range).toEqual({ start: 25, end: 51 });
+    expect(doc).toEqual(
+      expect.objectContaining({
+        id: expect.any(String),
+        rawText: expect.any(String),
+        summary: expect.any(String),
+        simplifiedText: expect.any(String),
+        highlights: { dates: [], amounts: [] },
+        createdAt: expect.any(String),
+      })
+    );
+  });
+
+  test("keeps a given id and createdAt", () => {
+    const doc = buildDocument("Hi there.", { id: "abc", createdAt: "2025-01-01T00:00:00.000Z" });
+    expect(doc.id).toBe("abc");
+    expect(doc.createdAt).toBe("2025-01-01T00:00:00.000Z");
+  });
+
+  test("generates unique ids", () => {
+    expect(buildDocument("Test").id).not.toBe(buildDocument("Test").id);
   });
 });
