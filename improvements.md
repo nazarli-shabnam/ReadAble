@@ -1,22 +1,11 @@
-# Improvements & Roadmap
+# Ideas not built yet
 
-## Completed
+These are candidates, not commitments. Each would need a clear reader benefit first.
 
-- OCR integration (ML Kit with stub fallback)
-- Storage/history with AsyncStorage
-- Dyslexia-friendly reader (Atkinson font, overlays, focus mode)
-- Q&A system (token-based retrieval, confidence scores)
-- TTS sync (sentence highlighting, pause/resume, seek)
-- Structure detection (lists, tables, headings)
-- Privacy controls (offline mode toggle)
-
-## Next Steps
-
-- OCR: Bounding box mapping, edge detection, multi-page capture
-- Fonts: OpenDyslexic font support
-- TTS: Rate persistence, platform-native TTS
-- Q&A: Embeddings-based retrieval
-- Summarization: Local LLM integration (llama.cpp/Phi-3)
-- Multi-page: Support multiple images/pages
-- Structure: Render tables/lists with formatting
-- Testing: Unit and integration tests
+- **Multi-page scanning**: capture several photos in a row and join them into one text.
+- **Crop before OCR**: let the reader frame just the paragraph they need.
+- **OpenDyslexic font**: not on Google Fonts, so it would ship as a bundled font file.
+- **Smarter Q&A and summaries**: on-device embeddings or a small local model, without giving up offline use.
+- **More languages**: sentence splitting, simplification and date/amount detection are English-only today.
+- **Dark theme**: a low-light theme alongside the light and high-contrast ones.
+- **Reading position**: remember where the reader stopped in each saved text.
