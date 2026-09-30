@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "new_project",
-    "slug": "new_project",
+    "name": "ReadAble",
+    "slug": "readable",
+    "description": "A reading aid for people with dyslexia: scan or paste text, read it in a calmer layout, listen to it, and ask about it. Everything stays on your device.",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,21 +11,45 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#EAF0EC"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nazarlishabnam.readable"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#EAF0EC"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.anonymous.new_project"
+      "package": "com.nazarlishabnam.readable"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "name": "ReadAble",
+      "shortName": "ReadAble",
+      "themeColor": "#1F5E66",
+      "backgroundColor": "#EAF0EC"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ReadAble reads text from the photos you choose. Photos stay on your device.",
+          "cameraPermission": "ReadAble uses the camera to scan printed text. Photos stay on your device.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.5"
+          }
+        }
+      ],
+      "expo-font"
+    ]
   }
 }

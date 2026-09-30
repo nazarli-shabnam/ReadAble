@@ -4,12 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
-import {
-  useFonts,
-  AtkinsonHyperlegible_400Regular,
-  AtkinsonHyperlegible_700Bold,
-} from "@expo-google-fonts/atkinson-hyperlegible";
-import { Lexend_400Regular, Lexend_700Bold } from "@expo-google-fonts/lexend";
+import { useFonts } from "expo-font";
 import { InputCard } from "./src/components/InputCard";
 import { ReaderCard } from "./src/components/ReaderCard";
 import { SummaryCard } from "./src/components/SummaryCard";
@@ -27,13 +22,17 @@ import { exportDocumentSummary } from "./src/utils/storage";
 import { error } from "./src/utils/logger";
 import { THEMES, ThemeContext } from "./src/theme";
 
+// Only the four faces the app uses; importing the packages' index files would
+// bundle every weight and italic (~850 kB of unused fonts).
+const FONT_FILES = {
+  AtkinsonHyperlegible_400Regular: require("@expo-google-fonts/atkinson-hyperlegible/AtkinsonHyperlegible_400Regular.ttf"),
+  AtkinsonHyperlegible_700Bold: require("@expo-google-fonts/atkinson-hyperlegible/AtkinsonHyperlegible_700Bold.ttf"),
+  Lexend_400Regular: require("@expo-google-fonts/lexend/400Regular/Lexend_400Regular.ttf"),
+  Lexend_700Bold: require("@expo-google-fonts/lexend/700Bold/Lexend_700Bold.ttf"),
+};
+
 export default function App() {
-  const [fontsLoaded, fontError] = useFonts({
-    AtkinsonHyperlegible_400Regular,
-    AtkinsonHyperlegible_700Bold,
-    Lexend_400Regular,
-    Lexend_700Bold,
-  });
+  const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   const [inputText, setInputText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [scanning, setScanning] = useState(false);
