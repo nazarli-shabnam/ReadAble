@@ -14,11 +14,6 @@ jest.mock('expo-clipboard', () => ({
   getStringAsync: jest.fn(() => Promise.resolve('')),
 }));
 
-jest.mock('expo-sharing', () => ({
-  isAvailableAsync: jest.fn(() => Promise.resolve(true)),
-  shareAsync: jest.fn(() => Promise.resolve()),
-}));
-
 jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),
   requestCameraPermissionsAsync: jest.fn(() => Promise.resolve({ status: 'granted' })),

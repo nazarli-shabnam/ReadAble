@@ -4,6 +4,7 @@ import {
   Alert,
   SafeAreaView,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Switch,
@@ -34,7 +35,6 @@ import {
   getTtsRate,
   setTtsRate as saveTtsRate,
 } from "./src/utils/storage";
-import * as Sharing from "expo-sharing";
 import { error } from "./src/utils/logger";
 
 const toRgba = (hex, opacity) => {
@@ -142,16 +142,15 @@ export default function App() {
     if (!activeDoc) return;
     try {
       const summary = exportDocumentSummary(activeDoc);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync({
-          message: summary,
-          mimeType: "text/plain",
-        });
-      } else {
-        Alert.alert("Sharing unavailable", "Native sharing is not available.");
+      try {
+        await Share.share({ message: summary });
+      } catch {
+        // Web without navigator.share: fall back to the clipboard
+        await Clipboard.setStringAsync(summary);
+        Alert.alert("Copied", "Summary copied to clipboard.");
       }
-    } catch (error) {
-      error("Error exporting summary:", error);
+    } catch (err) {
+      error("Error exporting summary:", err);
       Alert.alert("Export failed", "Unable to share summary right now.");
     }
   };
