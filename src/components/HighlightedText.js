@@ -1,19 +1,7 @@
 import { useMemo } from "react";
 import { Text } from "react-native";
 import { findKeySpans } from "../utils/textProcessing";
-
-const SPAN_COLORS = {
-  normal: {
-    date: { backgroundColor: "#fff3cd", color: "#6b4f1d" },
-    amount: { backgroundColor: "#dcf5ea", color: "#0f5132" },
-    active: { backgroundColor: "#dbeafe" },
-  },
-  highContrast: {
-    date: { backgroundColor: "#ffff00", color: "#000000" },
-    amount: { backgroundColor: "#00ff66", color: "#000000" },
-    active: { backgroundColor: "#00e5ff" },
-  },
-};
+import { useTheme } from "../theme";
 
 /**
  * Renders `text` with dates/amounts highlighted (found in the text being
@@ -28,9 +16,9 @@ export const HighlightedText = ({
   highlightStyle,
   sentences = [],
   activeSentenceIndex = null,
-  highContrast = false,
   onSentencePress,
 }) => {
+  const t = useTheme();
   const spans = useMemo(() => findKeySpans(text), [text]);
 
   const segments = useMemo(() => {
@@ -63,7 +51,11 @@ export const HighlightedText = ({
   }, [text, spans, sentences]);
 
   if (!text) return null;
-  const colors = highContrast ? SPAN_COLORS.highContrast : SPAN_COLORS.normal;
+  const colors = {
+    active: { backgroundColor: t.reading },
+    date: { backgroundColor: t.date, color: t.onDate },
+    amount: { backgroundColor: t.amount, color: t.onAmount },
+  };
 
   return (
     <Text style={style}>

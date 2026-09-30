@@ -36,4 +36,4 @@ export const OVERLAY_COLORS = [
   { value: "#ffe4e6", label: "Rose" },
 ];
 
-export const FONT_FAMILY_IDS = ["atkinson", "system"];
+export const FONT_FAMILY_IDS = ["atkinson", "lexend", "system"];
