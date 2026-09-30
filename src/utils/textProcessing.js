@@ -3,459 +3,472 @@ const generateId = () => {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 };
 
-// Compatible regex without lookbehind for React Native/Hermes
-const sentenceEndPattern = /([.!?])\s+(?=[A-Z0-9])/;
-const datePattern =
-  /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/gi;
-const moneyPattern =
-  /\b(?:USD|EUR|GBP|\$|€|£)?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})?\b/g;
+// ---------------------------------------------------------------------------
+// Key span patterns (dates, times, money)
+// ---------------------------------------------------------------------------
+
+const MONTH =
+  "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
+const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
+// "p.m" not "p.m." so a sentence-ending period is never swallowed.
+const MERIDIEM = "(?:[ap]\\.m|[ap]m)";
+
+// A bare month name ("may", "march") is not a date: it needs a day and/or year.
+const DATE_SOURCE = [
+  `${MONTH}\\s+${DAY}(?:,?\\s+\\d{4})?`, // March 12, 2025 / Mar 12
+  `${DAY}\\s+(?:of\\s+)?${MONTH}(?:,?\\s+\\d{4})?`, // 12 March 2025
+  `${MONTH},?\\s+\\d{4}`, // March 2025
+  "\\d{4}-\\d{2}-\\d{2}", // 2025-03-12
+  "\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}", // 12/03/2025
+  `\\d{1,2}:\\d{2}(?:\\s?${MERIDIEM})?`, // 6:00 PM
+  `\\d{1,2}\\s?${MERIDIEM}`, // 5 PM
+].join("|");
+
+const NUMBER = "(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?";
+const CURRENCY_SYMBOL = "[$€£¥₹]";
+const CURRENCY_WORD = "(?:USD|EUR|GBP|dollars?|euros?|pounds?|cents?)";
+
+// Money requires a currency marker before or after the number.
+const MONEY_SOURCE = [
+  `${CURRENCY_SYMBOL}\\s?${NUMBER}`, // $5, € 3.50
+  `\\b(?:USD|EUR|GBP)\\s?${NUMBER}`, // USD 20
+  `\\b${NUMBER}\\s?(?:${CURRENCY_SYMBOL}|${CURRENCY_WORD}\\b)`, // 12$, 5 USD, 10 dollars
+].join("|");
+
+// The trailing (?![\w]) stops "March 20" matching inside "March 2025".
+const datePattern = () => new RegExp(`\\b(?:${DATE_SOURCE})(?!\\w)`, "gi");
+const moneyPattern = () => new RegExp(`(?:${MONEY_SOURCE})`, "gi");
+// Non-global copies for .test(): global regexes keep lastIndex between calls.
+const DATE_TEST = new RegExp(`\\b(?:${DATE_SOURCE})(?!\\w)`, "i");
+const MONEY_TEST = new RegExp(`(?:${MONEY_SOURCE})`, "i");
+
+/**
+ * Finds date/time and money spans in text. Overlaps are resolved so the
+ * earliest (then longest) span wins.
+ * @returns {Array<{type: "date"|"amount", value: string, start: number, end: number}>}
+ */
+export const findKeySpans = (text) => {
+  if (!text) return [];
+  const collect = (pattern, type) =>
+    [...text.matchAll(pattern)].map((m) => ({
+      type,
+      value: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    }));
+  const all = [
+    ...collect(datePattern(), "date"),
+    ...collect(moneyPattern(), "amount"),
+  ].sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const spans = [];
+  for (const span of all) {
+    const last = spans[spans.length - 1];
+    if (!last || span.start >= last.end) spans.push(span);
+  }
+  return spans;
+};
+
+export const extractKeySpans = (text) => {
+  const spans = findKeySpans(text);
+  const pick = (type) =>
+    spans
+      .filter((s) => s.type === type)
+      .map(({ value, start }) => ({ value, index: start }));
+  return { dates: pick("date"), amounts: pick("amount") };
+};
+
+// ---------------------------------------------------------------------------
+// Tokens
+// ---------------------------------------------------------------------------
+
+// Light plural stemming so "fees" matches "fee" and "dates" matches "date".
+const stem = (word) => {
+  if (word.length > 4 && word.endsWith("ies")) return `${word.slice(0, -3)}y`;
+  if (/(?:s|x|z|ch|sh)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) {
+    return word.slice(0, -1);
+  }
+  return word;
+};
 
 export const tokenize = (text) =>
   (text || "")
     .toLowerCase()
     .split(/\W+/)
-    .filter((w) => w.length > 2);
+    .filter((w) => w.length > 2)
+    .map(stem);
 
-// Extract question type and key terms
-const analyzeQuestion = (question) => {
-  const lower = question.toLowerCase();
-  const tokens = tokenize(question);
+const STOP_WORDS = new Set(
+  (
+    "the are was were what when where who whom whose how why which can could will would " +
+    "should doe did does has have had for and but you your our this that these those there " +
+    "with about from they them their its any all get please tell much many into than then " +
+    "also just not yes been being able need"
+  )
+    .split(" ")
+    .map(stem)
+);
 
-  // Question type detection
-  let questionType = "general";
-  if (/\b(when|what time|what date|which day)\b/.test(lower)) {
-    questionType = "date";
-  } else if (
-    /\b(how much|what.*cost|price|fee|amount|dollar|money)\b/.test(lower)
-  ) {
-    questionType = "amount";
-  } else if (/\b(who|whom|whose)\b/.test(lower)) {
-    questionType = "person";
-  } else if (/\b(where|location|place)\b/.test(lower)) {
-    questionType = "location";
-  } else if (/\b(how|why|what|which)\b/.test(lower)) {
-    questionType = "detail";
-  }
+const contentTokens = (text) => tokenize(text).filter((t) => !STOP_WORDS.has(t));
 
-  // Extract key entities (dates, amounts, names)
-  const dates = [...question.matchAll(datePattern)];
-  const amounts = [...question.matchAll(moneyPattern)];
+// ---------------------------------------------------------------------------
+// Sentences
+// ---------------------------------------------------------------------------
 
-  // Important keywords (excluding common question words)
-  const stopWords = new Set([
-    "the",
-    "is",
-    "are",
-    "was",
-    "were",
-    "what",
-    "when",
-    "where",
-    "who",
-    "how",
-    "why",
-    "which",
-    "can",
-    "will",
-    "does",
-    "do",
-  ]);
-  const keywords = tokens.filter((t) => !stopWords.has(t));
+// Never end a sentence after these (they precede a name or continue the sentence).
+const NON_TERMINAL_ABBREVIATIONS = new Set(
+  "mr mrs ms dr prof sr jr st vs e.g i.e cf ca approx apt ave blvd rd mt ft".split(" ")
+);
+// These precede a number ("No. 5", "Vol. 3").
+const NUMBERING_ABBREVIATIONS = new Set("no vol pp fig ch sec art".split(" "));
+const CLOSING_PUNCTUATION = /[.!?"'”’)\]]/;
+const SENTENCE_START = /[A-Z0-9"'“‘(\[]/;
 
-  return {
-    questionType,
-    keywords,
-    tokens,
-    dates: dates.map((m) => m[0]),
-    amounts: amounts.map((m) => m[0]),
-  };
-};
-
-const ABBREVIATIONS = new Set([
-  "mr",
-  "mrs",
-  "ms",
-  "dr",
-  "prof",
-  "sr",
-  "jr",
-  "vs",
-  "etc",
-  "inc",
-  "ltd",
-  "corp",
-  "co",
-  "st",
-  "ave",
-  "blvd",
-  "rd",
-  "apt",
-  "no",
-  "vol",
-  "pp",
-  "ed",
-  "am",
-  "pm",
-  "e.g",
-  "i.e",
-  "cf",
-  "ca",
-  "approx",
-  "est",
-  "min",
-  "max",
-]);
-
-const isAbbreviation = (word) => {
-  if (!word) return false;
-  const lower = word.toLowerCase().replace(/[.!?]$/, "");
-  return ABBREVIATIONS.has(lower);
+const isSentenceEndingPeriod = (text, sentenceStart, dotIndex, nextChar) => {
+  let wordStart = dotIndex;
+  while (wordStart > sentenceStart && !/\s/.test(text[wordStart - 1])) wordStart--;
+  const word = text.slice(wordStart, dotIndex).replace(/^[("'“‘[]+/, "");
+  const lower = word.toLowerCase();
+  if (NON_TERMINAL_ABBREVIATIONS.has(lower)) return false;
+  // Initials and dotted acronyms: "J. K. Rowling", "U.S.A."
+  if (/^(?:[a-z]\.)*[a-z]$/i.test(word)) return false;
+  if (NUMBERING_ABBREVIATIONS.has(lower) && /\d/.test(nextChar || "")) return false;
+  return true;
 };
 
 /**
- * Splits text into sentences with position tracking for efficient range calculation.
- * 
- * Algorithm:
- * 1. Iterates through text character by character
- * 2. Detects sentence endings (. ! ?) that are NOT:
- *    - Abbreviations (Dr., Mr., etc.)
- *    - Decimal numbers (3.14)
- * 3. Validates sentence boundary by checking next non-whitespace character
- * 4. Returns sentences with their start positions for efficient range calculation
- * 
+ * Splits text into sentences with their positions in `text`.
+ *
+ * A boundary is . ! or ? (plus any closing quotes/brackets) followed by
+ * whitespace and a capital letter, digit, or opening quote. Blank lines and
+ * bullet lines always start a new sentence. Periods after abbreviations and
+ * initials, and inside numbers or emails, are not boundaries.
+ *
  * @param {string} text - Text to split into sentences
- * @returns {Array<{text: string, start: number, end: number}>} Array of sentence objects with positions
+ * @returns {Array<{text: string, start: number, end: number}>}
  */
 export const splitSentences = (text) => {
-  if (!text) return [];
-  const trimmed = text.trim();
-  if (!trimmed) return [];
-  
-  // Split on sentence endings followed by space and capital letter/number
-  // Compatible with React Native/Hermes (no lookbehind)
-  // Optimized: Track positions during split to avoid expensive indexOf searches
+  if (!text || !text.trim()) return [];
   const sentences = [];
-  let current = "";
-  let sentenceStart = 0;
-  
-  // Find first non-whitespace in original text for accurate positioning
-  let originalIndex = 0;
-  while (originalIndex < text.length && /\s/.test(text[originalIndex])) {
-    originalIndex++;
-  }
-  sentenceStart = originalIndex;
-  
-  for (let i = 0; i < trimmed.length; i++) {
-    const char = trimmed[i];
-    current += char;
-    
-    if (/[.!?]/.test(char)) {
-      // Check if this is likely an abbreviation (short word before punctuation)
-      const beforePunct = current.trim().split(/\s+/).pop() || "";
-      const isAbbrev = isAbbreviation(beforePunct);
+  const push = (from, to) => {
+    while (from < to && /\s/.test(text[from])) from++;
+    while (to > from && /\s/.test(text[to - 1])) to--;
+    if (to > from) sentences.push({ text: text.slice(from, to), start: from, end: to });
+  };
 
-      const isDecimal =
-        /\./.test(char) &&
-        i > 0 &&
-        /\d/.test(trimmed[i - 1]) &&
-        i < trimmed.length - 1 &&
-        /\d/.test(trimmed[i + 1]);
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
 
-      // Only split if not abbreviation and not decimal
-      if (!isAbbrev && !isDecimal) {
-        // Check if next non-whitespace is capital letter or number
-        let j = i + 1;
-        while (j < trimmed.length && /\s/.test(trimmed[j])) j++;
-        if (j >= trimmed.length || /[A-Z0-9]/.test(trimmed[j])) {
-          const sentenceText = current.trim();
-          if (sentenceText) {
-            const start = sentenceStart;
-            const end = start + sentenceText.length;
-            sentences.push({ text: sentenceText, start, end });
-            sentenceStart = end;
-            while (sentenceStart < text.length && /\s/.test(text[sentenceStart])) {
-              sentenceStart++;
-            }
-          }
-          current = "";
-        }
+    if (ch === "\n") {
+      let next = i + 1;
+      while (next < text.length && /[ \t\r]/.test(text[next])) next++;
+      const blankLine = text[next] === "\n";
+      const bulletLine = /^(?:[-*•]\s|\d+[.)]\s)/.test(text.slice(next, next + 4));
+      if (blankLine || bulletLine) {
+        push(start, i);
+        start = i + 1;
       }
+      continue;
     }
+
+    if (ch !== "." && ch !== "!" && ch !== "?") continue;
+
+    let end = i + 1;
+    while (end < text.length && CLOSING_PUNCTUATION.test(text[end])) end++;
+    let next = end;
+    while (next < text.length && /\s/.test(text[next])) next++;
+    const atEnd = next >= text.length;
+
+    const isBoundary =
+      atEnd ||
+      (next > end &&
+        SENTENCE_START.test(text[next]) &&
+        (ch !== "." || isSentenceEndingPeriod(text, start, i, text[next])));
+
+    if (isBoundary) {
+      push(start, end);
+      start = end;
+    }
+    i = end - 1;
   }
-  
-  if (current.trim()) {
-    const sentenceText = current.trim();
-    const start = sentenceStart;
-    const end = start + sentenceText.length;
-    sentences.push({ text: sentenceText, start, end });
-  }
-  
-  return sentences.length > 0 ? sentences : [{ text: trimmed, start: 0, end: trimmed.length }];
+  push(start, text.length);
+  return sentences;
 };
 
-export const extractKeySpans = (text) => {
-  if (!text) return { dates: [], amounts: [] };
-  const dates = [...text.matchAll(datePattern)].map((m) => ({
-    id: generateId(),
-    value: m[0],
-    index: m.index != null ? m.index : 0,
-  }));
-  const amounts = [...text.matchAll(moneyPattern)].map((m) => ({
-    id: generateId(),
-    value: m[0],
-    index: m.index != null ? m.index : 0,
-  }));
-  return { dates, amounts };
-};
+const sentenceTexts = (text, sentences = []) =>
+  sentences.length
+    ? sentences.map((s) => (typeof s === "string" ? s : s.text))
+    : splitSentences(text).map((s) => s.text);
 
+// ---------------------------------------------------------------------------
+// Summary
+// ---------------------------------------------------------------------------
+
+/**
+ * Extractive summary: scores sentences by how many of the document's frequent
+ * words they contain (plus a bonus for dates/amounts and for the opening
+ * sentence), then returns the best 2–3 in their original order.
+ */
 export const summarizeText = (text, sentences = []) => {
   if (!text) return "";
-  if (sentences.length > 0) {
-    const sentenceTexts = sentences.map(s => typeof s === 'string' ? s : s.text);
-    return sentenceTexts.slice(0, 2).join(" ").trim();
-  }
-  return text.split(/\s+/).slice(0, 40).join(" ").trim();
-};
+  const list = sentenceTexts(text, sentences);
+  const maxSentences = list.length > 5 ? 3 : 2;
+  if (list.length <= maxSentences) return list.join(" ").trim();
 
-export const simplifyText = (text, sentences = []) => {
-  if (!text) return "";
-  const sentenceTexts = sentences.length 
-    ? sentences.map(s => typeof s === 'string' ? s : s.text)
-    : splitSentences(text).map(s => s.text);
-    
-  const simpleSentences = sentenceTexts.map((s) =>
-    s
-      .replace(/[,;]/g, ".")
-      .replace(
-        /\b(however|therefore|moreover|furthermore|additionally)\b/gi,
-        ""
-      )
-      .trim()
+  const docFreq = {};
+  list.forEach((s) =>
+    new Set(contentTokens(s)).forEach((t) => {
+      docFreq[t] = (docFreq[t] || 0) + 1;
+    })
   );
-  return simpleSentences.join(". ").replace(/\s+\./g, ".").trim();
-};
 
-export const answerQuestion = (question, doc) => {
-  if (!question || !doc?.sentences?.length)
-    return { answer: "", confidence: 0, source: null };
-
-  const qAnalysis = analyzeQuestion(question);
-  // Don't return empty if we have tokens, even if no keywords (after stop word filtering)
-  if (
-    !qAnalysis.tokens.length &&
-    !qAnalysis.dates.length &&
-    !qAnalysis.amounts.length
-  ) {
-    return { answer: "", confidence: 0, source: null };
-  }
-
-  // Score each sentence based on multiple factors
-  const scored = doc.sentenceMeta.map((meta, idx) => {
-    const sentence = meta.text;
-    const sentenceLower = sentence.toLowerCase();
-    let score = 0;
-
-    // 1. Keyword matching (weighted by importance)
-    let keywordMatches = 0;
-    if (qAnalysis.keywords.length > 0) {
-      keywordMatches = qAnalysis.keywords.filter(
-        (kw) => meta.termFreq[kw] > 0 || sentenceLower.includes(kw)
-      ).length;
-      score += keywordMatches * 3; // Higher weight for keyword matches
-    }
-
-    // 2. Token frequency matching (use all tokens, not just keywords)
-    const tokenMatches = qAnalysis.tokens.reduce(
-      (acc, token) => acc + (meta.termFreq[token] || 0),
-      0
-    );
-    score += tokenMatches * 2; // Increase weight for token matches
-
-    // 3. Question type specific matching
-    if (qAnalysis.questionType === "date") {
-      // Boost sentences with dates
-      const hasDate = datePattern.test(sentence);
-      if (hasDate) score += 5;
-      // If question mentions specific date, check for match
-      if (qAnalysis.dates.length > 0) {
-        const matchesDate = qAnalysis.dates.some((qDate) =>
-          sentence.includes(qDate)
-        );
-        if (matchesDate) score += 10;
-      }
-    } else if (qAnalysis.questionType === "amount") {
-      // Boost sentences with amounts
-      const hasAmount = moneyPattern.test(sentence);
-      if (hasAmount) score += 5;
-      // If question mentions specific amount, check for match
-      if (qAnalysis.amounts.length > 0) {
-        const matchesAmount = qAnalysis.amounts.some((qAmount) =>
-          sentence.includes(qAmount)
-        );
-        if (matchesAmount) score += 10;
-      }
-    }
-
-    // 4. Exact phrase matching (for questions like "due date", "late fees")
-    const questionPhrases = question
-      .toLowerCase()
-      .replace(/[?!]/g, "")
-      .split(/\s+/)
-      .filter((w) => w.length > 3)
-      .slice(0, 3); // Take first few meaningful words
-
-    for (let i = 0; i < questionPhrases.length - 1; i++) {
-      const phrase = questionPhrases.slice(i, i + 2).join(" ");
-      if (sentenceLower.includes(phrase)) {
-        score += 8; // High boost for phrase matches
-      }
-    }
-
-    // 5. Position bonus (earlier sentences often more relevant)
-    const positionBonus =
-      Math.max(0, (doc.sentenceMeta.length - idx) / doc.sentenceMeta.length) *
-      2;
-    score += positionBonus;
-
-    return {
-      sentence: meta.text,
-      score,
-      index: idx,
-      keywordMatches: qAnalysis.keywords.length > 0 ? keywordMatches : 0,
-      tokenMatches,
-    };
+  const scored = list.map((sentence, index) => {
+    const tokens = contentTokens(sentence);
+    const weight = tokens.reduce((acc, t) => acc + docFreq[t], 0);
+    let score = tokens.length ? weight / Math.sqrt(tokens.length) : 0;
+    if (DATE_TEST.test(sentence) || MONEY_TEST.test(sentence)) score += 2;
+    if (index === 0) score += 1;
+    return { sentence, index, score };
   });
 
-  scored.sort((a, b) => b.score - a.score);
-  const topScore = scored[0]?.score || 0;
-  const secondScore = scored[1]?.score || 0;
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxSentences)
+    .sort((a, b) => a.index - b.index)
+    .map((s) => s.sentence)
+    .join(" ")
+    .trim();
+};
 
-  // Calculate confidence based on score gap and absolute value
-  let confidence = 0;
-  if (topScore > 0) {
-    const scoreGap = topScore - secondScore;
-    const normalizedScore = Math.min(1, topScore / 20); // Normalize to 0-1
-    confidence = Math.round(
-      (normalizedScore * 0.7 + (scoreGap > 3 ? 0.3 : scoreGap / 10) * 0.3) * 100
-    );
+// ---------------------------------------------------------------------------
+// Simplification
+// ---------------------------------------------------------------------------
+
+const SIMPLER_WORDS = {
+  "in order to": "to",
+  "prior to": "before",
+  "subsequent to": "after",
+  "in the event that": "if",
+  "due to the fact that": "because",
+  "at this point in time": "now",
+  "a large number of": "many",
+  "with regard to": "about",
+  "in addition": "also",
+  regarding: "about",
+  utilize: "use",
+  utilise: "use",
+  utilizes: "uses",
+  utilized: "used",
+  approximately: "about",
+  commence: "start",
+  commences: "starts",
+  initiate: "start",
+  purchase: "buy",
+  purchased: "bought",
+  assistance: "help",
+  sufficient: "enough",
+  additional: "more",
+  numerous: "many",
+  terminate: "end",
+  terminated: "ended",
+  obtain: "get",
+  require: "need",
+  requires: "needs",
+  required: "needed",
+  demonstrate: "show",
+  facilitate: "help",
+  endeavor: "try",
+  attempt: "try",
+  inquire: "ask",
+  notify: "tell",
+  inform: "tell",
+  subsequently: "later",
+  individuals: "people",
+  modify: "change",
+  remainder: "rest",
+  ascertain: "find out",
+  expedite: "speed up",
+  prohibited: "not allowed",
+  permitted: "allowed",
+};
+
+const SIMPLER_WORDS_PATTERN = new RegExp(
+  `\\b(?:${Object.keys(SIMPLER_WORDS)
+    .sort((a, b) => b.length - a.length)
+    .join("|")})\\b`,
+  "gi"
+);
+
+const matchCase = (source, replacement) => {
+  if (source === source.toUpperCase() && source.length > 1) return replacement.toUpperCase();
+  if (source[0] === source[0].toUpperCase()) {
+    return replacement[0].toUpperCase() + replacement.slice(1);
   }
+  return replacement;
+};
 
-  // Get best match
-  const best = scored[0];
+const LEADING_CONNECTIVE =
+  /^(?:however|therefore|moreover|furthermore|additionally|consequently|nevertheless|thus|hence|also)\b,?\s*/i;
+const INNER_CONNECTIVE =
+  /,\s*(?:however|therefore|moreover|furthermore|consequently|nevertheless)\s*,/gi;
+// Split points inside a long sentence: "; " and ", but/and/so/yet/or ".
+const CLAUSE_SPLIT = /;\s+|,\s+(?=(?:but|and|so|yet|or)\s)/i;
+const MIN_CLAUSE_WORDS = 5;
 
-  if (best && best.score > 0) {
-    // If we have a good match, return it (lower threshold to 1 instead of 3)
-    if (best.score >= 1) {
-      return {
-        answer: best.sentence,
-        confidence: Math.max(confidence, 40), // Minimum 40% if we found a match
-        source: { sentenceIndex: best.index, sentence: best.sentence },
-      };
-    }
+const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
+
+const finishSentence = (s) => {
+  let out = s.replace(LEADING_CONNECTIVE, "").replace(/^and\s+/i, "").trim();
+  out = out.replace(/[,;:\s]+$/, "");
+  if (!out) return "";
+  out = out[0].toUpperCase() + out.slice(1);
+  return /[.!?]["'”’)\]]*$/.test(out) ? out : `${out}.`;
+};
+
+// Split a long sentence into shorter ones, but only where both halves are
+// substantial. Commas inside numbers and dates are never touched.
+const splitClauses = (sentence) => {
+  const match = CLAUSE_SPLIT.exec(sentence);
+  if (!match) return [sentence];
+  const head = sentence.slice(0, match.index);
+  const tail = sentence.slice(match.index + match[0].length);
+  if (wordCount(head) < MIN_CLAUSE_WORDS || wordCount(tail) < MIN_CLAUSE_WORDS) {
+    return [sentence];
   }
+  return [head, ...splitClauses(tail)];
+};
 
-  // If no good match, try to find relevant sentences from highlights
-  if (qAnalysis.questionType === "date" && doc.highlights?.dates?.length > 0) {
-    const relevantDate = doc.highlights.dates[0];
-    const dateSentence = doc.sentences.find((s) =>
-      s.includes(relevantDate.value)
-    );
-    if (dateSentence) {
-      return {
-        answer: dateSentence,
-        confidence: 50,
-        source: { type: "date_highlight" },
-      };
-    }
+/**
+ * Produces an easier-to-read version: plainer words, no filler connectives,
+ * long sentences split into shorter ones. Paragraph breaks are kept.
+ */
+export const simplifyText = (text) => {
+  if (!text) return "";
+  return text
+    .split(/\n+/)
+    .map((paragraph) =>
+      splitSentences(paragraph)
+        .map((s) =>
+          s.text
+            .replace(SIMPLER_WORDS_PATTERN, (m) =>
+              matchCase(m, SIMPLER_WORDS[m.toLowerCase()])
+            )
+            .replace(INNER_CONNECTIVE, "")
+        )
+        .flatMap(splitClauses)
+        .map(finishSentence)
+        .filter(Boolean)
+        .join(" ")
+    )
+    .filter(Boolean)
+    .join("\n");
+};
+
+// ---------------------------------------------------------------------------
+// Question answering
+// ---------------------------------------------------------------------------
+
+const analyzeQuestion = (question) => {
+  const lower = question.toLowerCase();
+  let questionType = "general";
+  if (/\b(when|what time|what date|which day|deadline|due)\b/.test(lower)) {
+    questionType = "date";
+  } else if (/\b(how much|cost|price|fee|fees|amount|pay|charge)\b/.test(lower)) {
+    questionType = "amount";
   }
-
-  if (
-    qAnalysis.questionType === "amount" &&
-    doc.highlights?.amounts?.length > 0
-  ) {
-    const relevantAmount = doc.highlights.amounts[0];
-    const amountSentence = doc.sentences.find((s) =>
-      s.includes(relevantAmount.value)
-    );
-    if (amountSentence) {
-      return {
-        answer: amountSentence,
-        confidence: 50,
-        source: { type: "amount_highlight" },
-      };
-    }
-  }
-
-  // Fallback to summary if no good match
-  if (doc.summary) {
-    return {
-      answer: doc.summary,
-      confidence: 25,
-      source: { type: "summary" },
-    };
-  }
-
-  // Last resort: return first sentence
+  const keywords = [...new Set(contentTokens(question))];
   return {
-    answer: doc.sentences[0] || doc.rawText.slice(0, 200),
-    confidence: 15,
-    source: { type: "fallback" },
+    questionType,
+    keywords,
+    dates: [...question.matchAll(datePattern())].map((m) => m[0].toLowerCase()),
+    amounts: [...question.matchAll(moneyPattern())].map((m) => m[0].toLowerCase()),
   };
 };
 
-export const detectStructure = (text) => {
-  const structures = [];
-  const lines = text.split("\n");
-  lines.forEach((line, idx) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-    if (/^[-*•]\s/.test(trimmed) || /^\d+[.)]\s/.test(trimmed)) {
-      structures.push({ type: "list", lineIndex: idx, content: trimmed });
-    } else if (/\|\s*\|/.test(trimmed)) {
-      structures.push({ type: "table", lineIndex: idx, content: trimmed });
-    } else if (/^#{1,6}\s/.test(trimmed)) {
-      structures.push({ type: "heading", lineIndex: idx, content: trimmed });
+export const NOT_FOUND = { found: false, answer: "", confidence: 0, source: null };
+
+/**
+ * Finds the sentence that best answers `question`. A sentence only counts as
+ * an answer if it shares a keyword with the question or carries the kind of
+ * information asked for (a date for "when", an amount for "how much").
+ */
+export const answerQuestion = (question, doc) => {
+  if (!question?.trim() || !doc?.sentenceMeta?.length) return NOT_FOUND;
+  const q = analyzeQuestion(question);
+  if (!q.keywords.length && !q.dates.length && !q.amounts.length && q.questionType === "general") {
+    return NOT_FOUND;
+  }
+
+  const scored = doc.sentenceMeta.map((meta, index) => {
+    const lower = meta.text.toLowerCase();
+    const keywordHits = q.keywords.filter((kw) => meta.termFreq[kw] > 0).length;
+    let phraseHits = 0;
+    for (let i = 0; i < q.keywords.length - 1; i++) {
+      if (meta.termFreq[q.keywords[i]] && meta.termFreq[q.keywords[i + 1]]) phraseHits++;
     }
+    const typeMatch =
+      (q.questionType === "date" && DATE_TEST.test(meta.text)) ||
+      (q.questionType === "amount" && MONEY_TEST.test(meta.text));
+    const exactMatch = [...q.dates, ...q.amounts].some((v) => lower.includes(v));
+
+    const score =
+      keywordHits * 3 + phraseHits * 4 + (typeMatch ? 4 : 0) + (exactMatch ? 6 : 0);
+    return { text: meta.text, index, score, keywordHits, typeMatch };
   });
-  return structures;
+
+  // Stable sort: on ties the earlier sentence wins.
+  const ranked = [...scored].sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  if (!best || best.score === 0) return NOT_FOUND;
+  // A type match alone is too weak when the question has its own keywords.
+  if (best.keywordHits === 0 && q.keywords.length > 1 && !best.typeMatch) return NOT_FOUND;
+
+  const second = ranked[1]?.score || 0;
+  const coverage = q.keywords.length ? best.keywordHits / q.keywords.length : 0;
+  const margin = (best.score - second) / best.score;
+  const confidence = Math.round(
+    100 * Math.min(1, 0.6 * coverage + 0.2 * margin + (best.typeMatch ? 0.2 : 0))
+  );
+
+  return {
+    found: true,
+    answer: best.text,
+    confidence: Math.max(10, confidence),
+    source: { sentenceIndex: best.index },
+  };
 };
 
-export const buildDocument = (text) => {
-  const cleaned = text.trim();
-  // Optimized: splitSentences now returns positions, eliminating need for indexOf searches
-  const sentenceData = splitSentences(cleaned);
-  
-  // Extract sentences and ranges efficiently
-  const sentences = sentenceData.map(s => s.text);
-  const sentenceRanges = sentenceData.map(s => ({ start: s.start, end: s.end }));
+// ---------------------------------------------------------------------------
+// Document
+// ---------------------------------------------------------------------------
 
-  const sentenceMeta = sentences.map((sentence, idx) => {
-    const tokens = tokenize(sentence);
-    const termFreq = tokens.reduce((acc, token) => {
-      acc[token] = (acc[token] || 0) + 1;
-      return acc;
-    }, {});
-    return {
-      text: sentence,
-      tokens,
-      termFreq,
-      range: sentenceRanges[idx] || { start: 0, end: sentence.length },
-    };
+/**
+ * Builds a document with all derived data from its raw text. Only
+ * { id, rawText, createdAt } need to be stored; everything else is derived.
+ */
+export const buildDocument = (text, { id, createdAt } = {}) => {
+  const cleaned = (text || "").trim();
+  const sentenceData = splitSentences(cleaned);
+  const sentences = sentenceData.map((s) => s.text);
+
+  const sentenceMeta = sentenceData.map(({ text: sentence, start, end }) => {
+    const termFreq = {};
+    tokenize(sentence).forEach((t) => {
+      termFreq[t] = (termFreq[t] || 0) + 1;
+    });
+    return { text: sentence, termFreq, range: { start, end } };
   });
-  const summary = summarizeText(cleaned, sentences);
-  const simplifiedText = simplifyText(cleaned, sentences);
-  const highlights = extractKeySpans(cleaned);
-  const structures = detectStructure(cleaned);
+
   return {
-    id: generateId(),
+    id: id || generateId(),
     rawText: cleaned,
     sentences,
     sentenceMeta,
-    sentenceRanges, // Store ranges for HighlightedText
-    summary,
-    simplifiedText,
-    highlights,
-    structures,
-    createdAt: new Date().toISOString(),
+    summary: summarizeText(cleaned, sentences),
+    simplifiedText: simplifyText(cleaned),
+    highlights: extractKeySpans(cleaned),
+    createdAt: createdAt || new Date().toISOString(),
   };
 };

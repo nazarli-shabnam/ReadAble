@@ -94,9 +94,9 @@ export const useDocumentProcessor = () => {
       const updated = await loadDocuments();
       setHistory(updated);
       return doc;
-    } catch (error) {
-      error("processDocument error:", error);
-      throw error;
+    } catch (err) {
+      error("processDocument error:", err);
+      throw err;
     }
   }, []);
 
