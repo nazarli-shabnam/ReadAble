@@ -13,24 +13,15 @@ class ErrorBoundary extends React.Component {
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     // Update state so the next render will show the fallback UI
     return { hasError: true };
   }
 
-  componentDidCatch(error, errorInfo) {
-    // Log error to logger (which respects production guards)
-    error("ErrorBoundary caught an error:", error, errorInfo);
-    
-    this.setState({
-      error,
-      errorInfo,
-    });
-
-    // You can also log the error to an error reporting service here
-    // if (errorReportingService) {
-    //   errorReportingService.logError(error, errorInfo);
-    // }
+  componentDidCatch(err, errorInfo) {
+    // `err`, not `error`: the logger's `error` must not be shadowed here.
+    error("ErrorBoundary caught an error:", err, errorInfo);
+    this.setState({ error: err, errorInfo });
   }
 
   handleReset = () => {

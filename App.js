@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   SafeAreaView,
   ScrollView,
   Share,
@@ -24,7 +23,8 @@ import { AccessibilityControls } from "./src/components/AccessibilityControls";
 import { HighlightedText } from "./src/components/HighlightedText";
 import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
-import { runOcrFromImage } from "./src/utils/ocr";
+import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
+import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
 import {
   exportDocumentSummary,
@@ -46,7 +46,7 @@ const toRgba = (hex, opacity) => {
 };
 
 export default function App() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     AtkinsonHyperlegible_400Regular,
     AtkinsonHyperlegible_700Bold,
   });
@@ -89,7 +89,7 @@ export default function App() {
 
   const handleProcess = async () => {
     if (!inputText.trim()) {
-      alert("Please enter some text to process");
+      notify("Nothing to process", "Type, paste or scan some text first.");
       return;
     }
     setProcessing(true);
@@ -98,11 +98,11 @@ export default function App() {
       if (doc) {
         setAnswer("");
       } else {
-        alert("Failed to process document. Check console for errors.");
+        notify("Couldn't process text", "Please try again.");
       }
-    } catch (error) {
-      error("Error in handleProcess:", error);
-      alert("Error processing document: " + error.message);
+    } catch (err) {
+      error("Error in handleProcess:", err);
+      notify("Couldn't process text", err.message);
     } finally {
       setProcessing(false);
     }
@@ -110,21 +110,18 @@ export default function App() {
 
   const handleQuestion = () => {
     try {
-      if (!question.trim()) {
-        alert("Please enter a question");
-        return;
-      }
-      if (!activeDoc) {
-        alert("Please process a document first");
-        return;
-      }
+      if (!question.trim() || !activeDoc) return;
       const result = runQuestion(question);
-      setAnswer(result.answer || "");
+      setAnswer(
+        result.found
+          ? result.answer
+          : "I couldn't find that in this document. Try asking with other words."
+      );
       setAnswerConfidence(result.confidence || 0);
       setAnswerSource(result.source || null);
-    } catch (error) {
-      error("Error in handleQuestion:", error);
-      alert("Error getting answer: " + error.message);
+    } catch (err) {
+      error("Error in handleQuestion:", err);
+      notify("Couldn't answer", err.message);
     }
   };
 
@@ -147,106 +144,69 @@ export default function App() {
       } catch {
         // Web without navigator.share: fall back to the clipboard
         await Clipboard.setStringAsync(summary);
-        Alert.alert("Copied", "Summary copied to clipboard.");
+        notify("Copied", "Sharing isn't available here, so the summary was copied to your clipboard.");
       }
     } catch (err) {
       error("Error exporting summary:", err);
-      Alert.alert("Export failed", "Unable to share summary right now.");
+      notify("Export failed", "Unable to share the summary right now.");
     }
   };
 
   const handleDelete = async (docId) => {
+    const ok = await confirmAsync(
+      "Delete document?",
+      "This removes it from your history.",
+      "Delete"
+    );
+    if (!ok) return;
     await deleteDocument(docId);
     await refreshDocuments();
   };
 
-  const handlePickImage = async () => {
-    try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (perm.status !== "granted") {
-        alert("Permission to access photos is required.");
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      });
-      if (!result.canceled) {
-        const image = result.assets?.[0];
-        if (!image?.uri) {
-          alert("Invalid image selected. Please try again.");
-          return;
-        }
-        try {
-          const ocr = await runOcrFromImage(image);
-          if (ocr.meta?.provider === "stub") {
-            alert(
-              "OCR is not available in Expo Go.\n\n" +
-                "To use OCR features:\n" +
-                "1. Build a custom development client:\n" +
-                "   npx expo prebuild\n" +
-                "   npx expo run:ios (or run:android)\n\n" +
-                "2. Or manually type/paste text in the input field.\n\n" +
-                "The image was selected, but OCR text extraction requires native modules."
-            );
-            return;
-          }
-          setInputText(ocr.text || "");
-        } catch (ocrError) {
-          error("OCR error:", ocrError);
-          alert(
-            "Failed to extract text from image. Please try again or type manually."
-          );
-        }
-      }
-    } catch (error) {
-      error("Error picking image:", error);
-      alert("Failed to pick image. Please try again.");
-    }
+  const handleClearAll = async () => {
+    const ok = await confirmAsync(
+      "Clear all history?",
+      "Every saved document will be removed. This cannot be undone.",
+      "Clear all"
+    );
+    if (!ok) return;
+    await clearAllDocuments();
+    await refreshDocuments();
   };
 
-  const handleCameraCapture = async () => {
+  // Shared by camera and gallery: ask permission, get an image, run OCR.
+  const handleImage = async (source) => {
+    const fromCamera = source === "camera";
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== "granted") {
-        alert("Permission to access camera is required.");
+      const perm = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        notify(
+          "Permission needed",
+          `Allow access to your ${fromCamera ? "camera" : "photos"} in Settings to scan text.`
+        );
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        quality: 1,
-      });
-      if (!result.canceled) {
-        const image = result.assets?.[0];
-        if (!image?.uri) {
-          alert("Invalid image captured. Please try again.");
-          return;
-        }
-        try {
-          const ocr = await runOcrFromImage(image);
-          if (ocr.meta?.provider === "stub") {
-            alert(
-              "OCR is not available in Expo Go.\n\n" +
-                "To use OCR features:\n" +
-                "1. Build a custom development client:\n" +
-                "   npx expo prebuild\n" +
-                "   npx expo run:ios (or run:android)\n\n" +
-                "2. Or manually type/paste text in the input field.\n\n" +
-                "The photo was captured, but OCR text extraction requires native modules."
-            );
-            // Don't set the error message as text - let user type manually
-            return;
-          }
-          setInputText(ocr.text || "");
-        } catch (ocrError) {
-          error("OCR error:", ocrError);
-          alert(
-            "Failed to extract text from image. Please try again or type manually."
-          );
-        }
+      const options = { mediaTypes: ["images"], quality: 1 };
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      if (result.canceled) return;
+
+      const ocr = await runOcrFromImage(result.assets?.[0]);
+      if (ocr.status === "ok") {
+        setInputText(ocr.text);
+      } else if (ocr.status === "unavailable") {
+        notify("Text scanning unavailable", OCR_UNAVAILABLE_MESSAGE);
+      } else if (ocr.status === "empty") {
+        notify("No text found", "Try a sharper photo with the text filling the frame.");
+      } else {
+        notify("Couldn't read the image", "Please try again or type the text instead.");
       }
-    } catch (error) {
-      error("Error capturing image:", error);
-      alert("Failed to capture image. Please try again.");
+    } catch (err) {
+      error("Error getting image:", err);
+      notify("Couldn't open the image", "Please try again.");
     }
   };
 
@@ -263,16 +223,13 @@ export default function App() {
     loadPreferences();
   }, []);
 
-  const activeSentences = useMemo(() => {
-    if (!activeDoc) return [];
-    if (viewMode === "simplified") {
-      const sentences = splitSentences(activeDoc.simplifiedText);
-      return sentences.map(s => s.text); // Extract text from sentence objects
-    }
-    return activeDoc.sentences?.length
-      ? activeDoc.sentences
-      : splitSentences(activeDoc.rawText).map(s => s.text);
-  }, [activeDoc, viewMode]);
+  const viewText = activeDoc
+    ? viewMode === "simplified"
+      ? activeDoc.simplifiedText
+      : activeDoc.rawText
+    : "";
+  // Sentence ranges of the text on screen; shared by the reader and focus mode.
+  const activeSentences = useMemo(() => splitSentences(viewText), [viewText]);
 
   // Reset focus line index when document or focus mode changes
   useEffect(() => {
@@ -301,7 +258,7 @@ export default function App() {
     }),
   };
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return (
       <SafeAreaView style={styles.safe}>
         <ActivityIndicator style={{ marginTop: 40 }} />
@@ -366,11 +323,11 @@ export default function App() {
           <View style={styles.row}>
             <TouchableOpacity
               style={styles.button}
-              onPress={handleCameraCapture}
+              onPress={() => handleImage("camera")}
             >
               <Text style={styles.buttonText}>Capture with camera</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={handlePickImage}>
+            <TouchableOpacity style={styles.button} onPress={() => handleImage("library")}>
               <Text style={styles.buttonText}>Pick image</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -535,11 +492,7 @@ export default function App() {
                       </TouchableOpacity>
                     </View>
                     <HighlightedText
-                      text={activeSentences[focusLineIndex] || ""}
-                      dates={activeDoc.highlights?.dates}
-                      amounts={activeDoc.highlights?.amounts}
-                      sentences={[activeSentences[focusLineIndex] || ""]}
-                      activeSentenceIndex={0}
+                      text={activeSentences[focusLineIndex]?.text || ""}
                       highContrast={highContrast}
                       style={{
                         fontSize: fontScale,
@@ -563,20 +516,9 @@ export default function App() {
                   </View>
                 ) : (
                   <HighlightedText
-                    text={
-                      viewMode === "simplified"
-                        ? activeDoc.simplifiedText
-                        : activeDoc.rawText
-                    }
-                    dates={activeDoc.highlights?.dates}
-                    amounts={activeDoc.highlights?.amounts}
+                    text={viewText}
                     sentences={activeSentences}
                     activeSentenceIndex={ttsState.sentenceIndex}
-                    sentenceRanges={
-                      viewMode === "original" && activeDoc.sentenceRanges
-                        ? activeDoc.sentenceRanges
-                        : null
-                    }
                     highContrast={highContrast}
                     style={{
                       fontSize: fontScale,
@@ -719,13 +661,10 @@ export default function App() {
                   onPress={async () => {
                     try {
                       await Clipboard.setStringAsync(answer);
-                      Alert.alert("Copied", "Answer copied to clipboard!");
+                      notify("Copied", "Answer copied to clipboard.");
                     } catch (err) {
                       error("Clipboard error", err);
-                      Alert.alert(
-                        "Copy failed",
-                        "Could not copy to clipboard. Please try again."
-                      );
+                      notify("Copy failed", "Could not copy to clipboard.");
                     }
                   }}
                 >
@@ -855,24 +794,7 @@ export default function App() {
                   backgroundColor: "#ef4444",
                   borderRadius: 6,
                 }}
-                onPress={() => {
-                  Alert.alert(
-                    "Clear All History",
-                    "Are you sure you want to clear all history? This cannot be undone.",
-                    [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Clear All",
-                        style: "destructive",
-                        onPress: async () => {
-                          await clearAllDocuments();
-                          await refreshDocuments();
-                          Alert.alert("Success", "All history cleared.");
-                        },
-                      },
-                    ]
-                  );
-                }}
+                onPress={handleClearAll}
               >
                 <Text
                   style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}
@@ -903,11 +825,7 @@ export default function App() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.secondaryButton, { flex: 1 }]}
-                  onPress={async () => {
-                    await clearAllDocuments();
-                    await refreshDocuments();
-                    Alert.alert("Success", "Storage cleared. History will be empty.");
-                  }}
+                  onPress={handleClearAll}
                 >
                   <Text style={styles.secondaryButtonText}>Clear Storage</Text>
                 </TouchableOpacity>
