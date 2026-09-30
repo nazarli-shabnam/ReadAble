@@ -1,9 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { buildDocument, answerQuestion, NOT_FOUND } from "../utils/textProcessing";
-import { loadDocuments, saveDocument } from "../utils/storage";
-import { log, warn, error } from "../utils/logger";
+import {
+  loadDocuments,
+  saveDocument,
+  deleteDocument,
+  clearAllDocuments,
+} from "../utils/storage";
+import { warn } from "../utils/logger";
 
-/** Owns the active document and the saved history. */
+const open = (record) => (record ? buildDocument(record.rawText, record) : null);
+
+/**
+ * Owns the saved history (stored records: { id, rawText, createdAt }) and the
+ * active document (built from its record, with all derived data).
+ */
 export const useDocumentProcessor = () => {
   const [history, setHistory] = useState([]);
   const [activeDoc, setActiveDoc] = useState(null);
@@ -14,12 +24,12 @@ export const useDocumentProcessor = () => {
     try {
       setHistoryError(null);
       setLoading(true);
-      const docs = await loadDocuments();
-      setHistory(docs);
-      if (docs.length > 0) setActiveDoc(docs[0]);
+      const records = await loadDocuments();
+      setHistory(records);
+      setActiveDoc((current) => current || open(records[0]));
     } catch (err) {
       warn("Failed to load documents:", err);
-      setHistoryError("Failed to load document history. Please try again.");
+      setHistoryError("Couldn't load your saved documents.");
     } finally {
       setLoading(false);
     }
@@ -29,47 +39,49 @@ export const useDocumentProcessor = () => {
     loadHistory();
   }, [loadHistory]);
 
-  const processDocument = useCallback(async (text) => {
-    try {
-      if (!text || !text.trim()) {
-        warn("processDocument: Empty text provided");
-        return null;
-      }
+  // Re-read history after a change; if the active document was removed,
+  // fall back to the newest remaining one.
+  const refresh = useCallback(async () => {
+    const records = await loadDocuments();
+    setHistory(records);
+    setActiveDoc((current) =>
+      current && records.some((r) => r.id === current.id) ? current : open(records[0])
+    );
+  }, []);
+
+  /** Builds, shows and saves a document. Throws if saving fails. */
+  const processDocument = useCallback(
+    async (text) => {
+      if (!text?.trim()) return null;
       const doc = buildDocument(text);
-      log("processDocument: Document created", {
-        id: doc.id,
-        sentences: doc.sentences.length,
-      });
       setActiveDoc(doc);
       await saveDocument(doc);
-      setHistory(await loadDocuments());
+      await refresh();
       return doc;
-    } catch (err) {
-      error("processDocument error:", err);
-      throw err;
-    }
-  }, []);
+    },
+    [refresh]
+  );
 
-  const loadDocument = useCallback(async (docId) => {
-    const docs = await loadDocuments();
-    const doc = docs.find((d) => d.id === docId);
-    if (doc) setActiveDoc(doc);
-    return doc;
-  }, []);
+  const loadDocument = useCallback(
+    (docId) => {
+      const record = history.find((r) => r.id === docId);
+      if (record) setActiveDoc(open(record));
+    },
+    [history]
+  );
 
-  const refreshDocuments = useCallback(async () => {
-    try {
-      setHistoryError(null);
-      const docs = await loadDocuments();
-      setHistory(docs);
-      setActiveDoc((current) =>
-        current && !docs.some((d) => d.id === current.id) ? docs[0] || null : current
-      );
-    } catch (err) {
-      warn("Failed to refresh documents:", err);
-      setHistoryError("Failed to refresh document history. Please try again.");
-    }
-  }, []);
+  const removeDocument = useCallback(
+    async (docId) => {
+      await deleteDocument(docId);
+      await refresh();
+    },
+    [refresh]
+  );
+
+  const clearHistory = useCallback(async () => {
+    await clearAllDocuments();
+    await refresh();
+  }, [refresh]);
 
   const runQuestion = useCallback(
     (question) => (activeDoc ? answerQuestion(question, activeDoc) : NOT_FOUND),
@@ -83,7 +95,8 @@ export const useDocumentProcessor = () => {
     historyError,
     processDocument,
     loadDocument,
-    refreshDocuments,
+    removeDocument,
+    clearHistory,
     retryLoadHistory: loadHistory,
     runQuestion,
   };

@@ -6,7 +6,6 @@ import {
   Share,
   StatusBar,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -27,15 +26,8 @@ import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
-import {
-  exportDocumentSummary,
-  deleteDocument,
-  clearAllDocuments,
-  getOfflineMode,
-  setOfflineMode,
-  getTtsRate,
-  setTtsRate as saveTtsRate,
-} from "./src/utils/storage";
+import { exportDocumentSummary } from "./src/utils/storage";
+import { useSettings } from "./src/hooks/useSettings";
 import { error } from "./src/utils/logger";
 
 const toRgba = (hex, opacity) => {
@@ -58,18 +50,20 @@ export default function App() {
   const [answer, setAnswer] = useState("");
   const [answerConfidence, setAnswerConfidence] = useState(0);
   const [answerSource, setAnswerSource] = useState(null);
-  const [highContrast, setHighContrast] = useState(false);
-  const [fontScale, setFontScale] = useState(18);
-  const [lineHeight, setLineHeight] = useState(24);
-  const [letterSpacing, setLetterSpacing] = useState(0.2);
-  const [overlayEnabled, setOverlayEnabled] = useState(false);
-  const [overlayColor, setOverlayColor] = useState("#fef3c7");
-  const [overlayOpacity, setOverlayOpacity] = useState(0.4);
-  const [selectedFont, setSelectedFont] = useState("atkinson");
-  const [focusMode, setFocusMode] = useState(false);
   const [focusLineIndex, setFocusLineIndex] = useState(0);
-  const [offlineMode, setOfflineModeState] = useState(true);
-  const [ttsRate, setTtsRate] = useState(1.0);
+  const [settings, updateSettings] = useSettings();
+  const {
+    highContrast,
+    fontSize: fontScale,
+    letterSpacing,
+    overlayEnabled,
+    overlayColor,
+    overlayOpacity,
+    fontFamily: selectedFont,
+    focusMode,
+    ttsRate,
+  } = settings;
+  const lineHeight = Math.round(fontScale * settings.lineSpacing);
   const {
     activeDoc,
     history,
@@ -77,7 +71,8 @@ export default function App() {
     historyError,
     processDocument,
     loadDocument,
-    refreshDocuments,
+    removeDocument,
+    clearHistory,
     retryLoadHistory,
     runQuestion,
   } = useDocumentProcessor();
@@ -122,8 +117,8 @@ export default function App() {
   };
 
 
-  const handleLoadDocument = async (docId) => {
-    await loadDocument(docId);
+  const handleLoadDocument = (docId) => {
+    loadDocument(docId);
     setAnswer("");
   };
 
@@ -151,8 +146,12 @@ export default function App() {
       "Delete"
     );
     if (!ok) return;
-    await deleteDocument(docId);
-    await refreshDocuments();
+    try {
+      await removeDocument(docId);
+    } catch (err) {
+      error("Error deleting document:", err);
+      notify("Couldn't delete", "Please try again.");
+    }
   };
 
   const handleClearAll = async () => {
@@ -162,8 +161,12 @@ export default function App() {
       "Clear all"
     );
     if (!ok) return;
-    await clearAllDocuments();
-    await refreshDocuments();
+    try {
+      await clearHistory();
+    } catch (err) {
+      error("Error clearing history:", err);
+      notify("Couldn't clear history", "Please try again.");
+    }
   };
 
   // Shared by camera and gallery: ask permission, get an image, run OCR.
@@ -201,19 +204,6 @@ export default function App() {
       notify("Couldn't open the image", "Please try again.");
     }
   };
-
-  // Load preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      const [offlineMode, ttsRate] = await Promise.all([
-        getOfflineMode(),
-        getTtsRate(),
-      ]);
-      setOfflineModeState(offlineMode);
-      setTtsRate(ttsRate);
-    };
-    loadPreferences();
-  }, []);
 
   const viewText = activeDoc
     ? viewMode === "simplified"
@@ -290,35 +280,10 @@ export default function App() {
             <Text style={styles.title}>Multimodal Reading Aid</Text>
             <Text style={styles.subtitle}>
               Capture text, simplify it, hear it aloud, and ask questions.
-              Offline-friendly by design.
+              Everything stays on your device.
             </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Text style={{ fontSize: 12, color: "#6b7280" }}>Offline</Text>
-            <Switch
-              value={offlineMode}
-              onValueChange={async (value) => {
-                setOfflineModeState(value);
-                await setOfflineMode(value);
-              }}
-              trackColor={{ false: "#d1d5db", true: "#10b981" }}
-            />
           </View>
         </View>
-        {!offlineMode && (
-          <View
-            style={{
-              backgroundColor: "#fef3c7",
-              padding: 10,
-              borderRadius: 8,
-              marginBottom: 12,
-            }}
-          >
-            <Text style={{ fontSize: 12, color: "#92400e" }}>
-              ⚠️ Cloud mode enabled. Data may be sent to external services.
-            </Text>
-          </View>
-        )}
 
         <View style={[styles.card, highContrast && styles.cardHighContrast]}>
           <Text
@@ -390,31 +355,7 @@ export default function App() {
           >
             2) Dyslexia-friendly reader
           </Text>
-          <AccessibilityControls
-            highContrast={highContrast}
-            onToggleContrast={() => setHighContrast((v) => !v)}
-            fontScale={fontScale}
-            onFontScaleChange={setFontScale}
-            lineHeight={lineHeight}
-            onLineHeightChange={setLineHeight}
-            letterSpacing={letterSpacing}
-            onLetterSpacingChange={setLetterSpacing}
-            overlayEnabled={overlayEnabled}
-            onToggleOverlay={() => setOverlayEnabled((v) => !v)}
-            overlayColor={overlayColor}
-            onOverlayColorChange={setOverlayColor}
-            overlayOpacity={overlayOpacity}
-            onOverlayOpacityChange={setOverlayOpacity}
-            selectedFont={selectedFont}
-            onFontChange={setSelectedFont}
-            focusMode={focusMode}
-            onToggleFocusMode={() => setFocusMode((v) => !v)}
-            ttsRate={ttsRate}
-            onTtsRateChange={async (rate) => {
-              setTtsRate(rate); // Update state
-              await saveTtsRate(rate); // Persist to storage
-            }}
-          />
+          <AccessibilityControls settings={settings} onChange={updateSettings} />
           {activeDoc ? (
             <View>
               <View style={styles.row}>
@@ -829,7 +770,7 @@ export default function App() {
                       ]}
                       numberOfLines={1}
                     >
-                      {doc.summary || doc.rawText.slice(0, 50)}...
+                      {doc.rawText}
                     </Text>
                     <Text style={[styles.placeholder, { fontSize: 11 }]}>
                       {new Date(doc.createdAt).toLocaleDateString()}
