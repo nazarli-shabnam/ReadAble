@@ -22,6 +22,7 @@ import * as ImagePicker from "expo-image-picker";
 import { AccessibilityControls } from "./src/components/AccessibilityControls";
 import { HighlightedText } from "./src/components/HighlightedText";
 import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
+import { useSpeech } from "./src/hooks/useSpeech";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
@@ -79,13 +80,8 @@ export default function App() {
     refreshDocuments,
     retryLoadHistory,
     runQuestion,
-    speak,
-    pauseSpeaking,
-    resumeSpeaking,
-    seekToSentence,
-    stopSpeaking,
-    ttsState,
   } = useDocumentProcessor();
+  const speech = useSpeech(ttsRate);
 
   const handleProcess = async () => {
     if (!inputText.trim()) {
@@ -125,10 +121,6 @@ export default function App() {
     }
   };
 
-  const handleStop = () => stopSpeaking();
-  const handlePause = () => pauseSpeaking();
-  const handleResume = () => resumeSpeaking(activeDoc, viewMode, ttsRate);
-  const handleSpeak = () => speak(activeDoc, viewMode, 0, ttsRate);
 
   const handleLoadDocument = async (docId) => {
     await loadDocument(docId);
@@ -230,6 +222,20 @@ export default function App() {
     : "";
   // Sentence ranges of the text on screen; shared by the reader and focus mode.
   const activeSentences = useMemo(() => splitSentences(viewText), [viewText]);
+
+  const readingAloud = speech.source === "document" ? speech.index : null;
+
+  // What is spoken must match what is highlighted: stop when the text changes.
+  const { stop: stopSpeech } = speech;
+  useEffect(() => {
+    stopSpeech();
+  }, [viewText, stopSpeech]);
+
+  const handlePlayPause = () => {
+    if (speech.status === "speaking") speech.pause();
+    else if (speech.status === "paused") speech.resume();
+    else speech.play(activeSentences.map((s) => s.text));
+  };
 
   // Reset focus line index when document or focus mode changes
   useEffect(() => {
@@ -518,7 +524,7 @@ export default function App() {
                   <HighlightedText
                     text={viewText}
                     sentences={activeSentences}
-                    activeSentenceIndex={ttsState.sentenceIndex}
+                    activeSentenceIndex={readingAloud}
                     highContrast={highContrast}
                     style={{
                       fontSize: fontScale,
@@ -700,77 +706,40 @@ export default function App() {
           >
             5) Listen
           </Text>
-          {ttsState.speaking && (
-            <Text style={styles.caption}>
-              Speaking sentence {Math.max(1, (ttsState.sentenceIndex ?? 0) + 1)}{" "}
-              of {ttsState.totalSentences || "—"}
+          {readingAloud !== null && (
+            <Text style={styles.caption} accessibilityLiveRegion="polite">
+              {speech.status === "paused" ? "Paused at" : "Reading"} sentence{" "}
+              {readingAloud + 1} of {speech.total}
             </Text>
           )}
           <View style={styles.row}>
             <TouchableOpacity
-              style={styles.button}
-              onPress={() => {
-                if (ttsState.paused) {
-                  resumeSpeaking(activeDoc, viewMode, ttsRate);
-                } else {
-                  handleSpeak();
-                }
-              }}
+              style={[styles.button, !activeDoc && styles.buttonDisabled]}
+              onPress={handlePlayPause}
               disabled={!activeDoc}
             >
               <Text style={styles.buttonText}>
-                {ttsState.speaking
-                  ? "Speaking…"
-                  : ttsState.paused
+                {speech.status === "speaking"
+                  ? "Pause"
+                  : speech.status === "paused"
                   ? "Resume"
-                  : "Play TTS"}
+                  : "Play"}
               </Text>
             </TouchableOpacity>
-            {ttsState.speaking && (
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={pauseSpeaking}
-              >
-                <Text style={styles.secondaryButtonText}>Pause</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={handleStop}
-            >
-              <Text style={styles.secondaryButtonText}>Stop</Text>
-            </TouchableOpacity>
-          </View>
-          {ttsState.totalSentences > 0 && (
-            <View
-              style={{
-                marginTop: 8,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: 4,
-              }}
-            >
-              {Array.from({
-                length: Math.min(ttsState.totalSentences, 10),
-              }).map((_, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() =>
-                    seekToSentence(activeDoc, viewMode, i, ttsRate)
-                  }
-                  style={{
-                    padding: 4,
-                    paddingHorizontal: 8,
-                    backgroundColor:
-                      i === ttsState.sentenceIndex ? "#c7d2fe" : "#e5e7eb",
-                    borderRadius: 4,
-                  }}
-                >
-                  <Text style={{ fontSize: 12 }}>{i + 1}</Text>
+            {speech.status !== "idle" && (
+              <>
+                <TouchableOpacity style={styles.secondaryButton} onPress={speech.prev}>
+                  <Text style={styles.secondaryButtonText}>Prev</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-          )}
+                <TouchableOpacity style={styles.secondaryButton} onPress={speech.next}>
+                  <Text style={styles.secondaryButtonText}>Next</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={speech.stop}>
+                  <Text style={styles.secondaryButtonText}>Stop</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
 
         <View style={[styles.card, highContrast && styles.cardHighContrast]}>
