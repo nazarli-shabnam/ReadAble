@@ -1,178 +1,174 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { warn, error } from "./logger";
+import { warn } from "./logger";
+import {
+  DEFAULT_SETTINGS,
+  SETTING_LIMITS,
+  OVERLAY_COLORS,
+  FONT_FAMILY_IDS,
+  clampToStep,
+} from "../constants/settings";
 
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   DOCUMENTS: "@readable:documents",
-  HISTORY: "@readable:history",
-  OFFLINE_MODE: "@readable:offlineMode",
+  CORRUPT_DOCUMENTS: "@readable:documents.corrupt",
+  SETTINGS: "@readable:settings",
+};
+
+// Keys written by earlier versions.
+const LEGACY_KEYS = {
   TTS_RATE: "@readable:ttsRate",
+  OFFLINE_MODE: "@readable:offlineMode",
+  HISTORY: "@readable:history",
 };
 
-const isValidDocument = (doc) => {
-  if (!doc || typeof doc !== "object") return false;
-  if (!doc.id || typeof doc.id !== "string") return false;
-  if (!doc.rawText || typeof doc.rawText !== "string") return false;
-  if (!doc.createdAt || typeof doc.createdAt !== "string") return false;
-  if (doc.sentences && !Array.isArray(doc.sentences)) return false;
-  if (doc.sentenceMeta && !Array.isArray(doc.sentenceMeta)) return false;
-  if (doc.highlights && typeof doc.highlights !== "object") return false;
-  return true;
+const MAX_DOCUMENTS = 50;
+
+// ---------------------------------------------------------------------------
+// Documents
+//
+// Only { id, rawText, createdAt } is stored; everything else is derived by
+// buildDocument when a document is opened. Records written by older versions
+// (which also stored derived fields) load the same way.
+// ---------------------------------------------------------------------------
+
+const toRecord = (doc) => {
+  if (!doc || typeof doc !== "object") return null;
+  const { id, rawText, createdAt } = doc;
+  if (typeof id !== "string" || !id) return null;
+  if (typeof rawText !== "string" || !rawText.trim()) return null;
+  if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) return null;
+  return { id, rawText, createdAt };
 };
 
-const validateDocuments = (docs) => {
-  if (!Array.isArray(docs)) return [];
-  return docs.filter((doc) => {
-    if (!isValidDocument(doc)) {
-      warn("Invalid document found, skipping:", doc?.id);
-      return false;
-    }
-    return true;
-  });
-};
+const writeRecords = (records) =>
+  AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(records));
 
-export const saveDocument = async (doc) => {
-  try {
-    if (!isValidDocument(doc)) {
-      error("Cannot save invalid document:", doc);
-      return false;
-    }
-    const existing = await loadDocuments();
-    const updated = [doc, ...existing.filter((d) => d.id !== doc.id)].slice(
-      0,
-      50
-    );
-    await AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(updated));
-    return true;
-  } catch (err) {
-    warn("Failed to save document:", err);
-    return false;
-  }
-};
-
+/**
+ * Loads saved document records, newest first.
+ *
+ * A failed read throws (the data may be fine; the caller offers a retry).
+ * Unparseable data is moved to a backup key rather than deleted, so a bug or
+ * partial write never silently destroys the user's history.
+ *
+ * @returns {Promise<Array<{id: string, rawText: string, createdAt: string}>>}
+ */
 export const loadDocuments = async () => {
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS);
+  if (!raw) return [];
+
+  let parsed;
   try {
-    const data = await AsyncStorage.getItem(STORAGE_KEYS.DOCUMENTS);
-    if (!data) return [];
-    const parsed = JSON.parse(data);
-    const validated = validateDocuments(parsed);
-    
-    if (validated.length !== parsed.length) {
-      try {
-        await AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(validated));
-      } catch (saveErr) {
-        warn("Failed to save cleaned documents:", saveErr);
-      }
-    }
-    
-    return validated;
-  } catch (err) {
-    warn("Failed to load documents, clearing corrupted data:", err);
-    try {
-      await AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
-    } catch (clearErr) {
-      warn("Failed to clear corrupted storage:", clearErr);
-    }
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = null;
+  }
+  if (!Array.isArray(parsed)) {
+    warn("Saved documents are unreadable; moving them to a backup key.");
+    await AsyncStorage.setItem(STORAGE_KEYS.CORRUPT_DOCUMENTS, raw);
+    await AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
     return [];
   }
+
+  const records = parsed.map(toRecord).filter(Boolean);
+  if (records.length !== parsed.length) {
+    warn(`Skipped ${parsed.length - records.length} invalid saved document(s).`);
+  }
+  return records;
+};
+
+/**
+ * Saves a document at the top of the history. Saving text that is already in
+ * the history replaces that entry instead of adding a duplicate.
+ */
+export const saveDocument = async (doc) => {
+  const record = toRecord(doc);
+  if (!record) throw new Error("Cannot save an invalid document.");
+  const existing = await loadDocuments();
+  const others = existing.filter(
+    (r) => r.id !== record.id && r.rawText.trim() !== record.rawText.trim()
+  );
+  await writeRecords([record, ...others].slice(0, MAX_DOCUMENTS));
 };
 
 export const deleteDocument = async (docId) => {
-  try {
-    const existing = await loadDocuments();
-    const updated = existing.filter((d) => d.id !== docId);
-    await AsyncStorage.setItem(STORAGE_KEYS.DOCUMENTS, JSON.stringify(updated));
-    return true;
-  } catch (err) {
-    warn("Failed to delete document:", err);
-    return false;
-  }
+  const existing = await loadDocuments();
+  await writeRecords(existing.filter((r) => r.id !== docId));
 };
+
+export const clearAllDocuments = () => AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
 
 export const exportDocumentSummary = (doc) => {
   if (!doc) return "";
   const lines = [
-    `Document: ${doc.id}`,
-    `Created: ${doc.createdAt}`,
+    "ReadAble summary",
+    `Saved: ${new Date(doc.createdAt).toLocaleString()}`,
     "",
-    "=== Summary ===",
+    "Summary",
     doc.summary || "No summary available.",
-    "",
-    "=== Key Information ===",
   ];
-  if (doc.highlights?.dates?.length) {
-    lines.push("Dates:");
-    doc.highlights.dates.forEach((d) => lines.push(`  - ${d.value}`));
+  const { dates = [], amounts = [] } = doc.highlights || {};
+  if (dates.length || amounts.length) {
+    lines.push("", "Key information");
+    dates.forEach((d) => lines.push(`- Date/time: ${d.value}`));
+    amounts.forEach((a) => lines.push(`- Amount: ${a.value}`));
   }
-  if (doc.highlights?.amounts?.length) {
-    lines.push("Amounts:");
-    doc.highlights.amounts.forEach((a) => lines.push(`  - ${a.value}`));
-  }
-  lines.push("");
-  lines.push("=== Simplified Text ===");
-  lines.push(doc.simplifiedText || doc.rawText);
+  lines.push("", "Simplified text", doc.simplifiedText || doc.rawText);
   return lines.join("\n");
 };
 
-export const clearAllDocuments = async () => {
-  try {
-    await AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
-    return true;
-  } catch (err) {
-    warn("Failed to clear all documents:", err);
-    return false;
-  }
-};
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
 
-// Offline mode persistence
-export const getOfflineMode = async () => {
-  try {
-    const value = await AsyncStorage.getItem(STORAGE_KEYS.OFFLINE_MODE);
-    return value !== null ? JSON.parse(value) : true; // Default to offline (true)
-  } catch (err) {
-    warn("Failed to load offline mode preference:", err);
-    return true; // Default to offline
-  }
-};
+/** Returns a complete, valid settings object; bad or missing fields fall back to defaults. */
+export const normalizeSettings = (input) => {
+  const source = input && typeof input === "object" ? input : {};
+  const settings = { ...DEFAULT_SETTINGS };
 
-export const setOfflineMode = async (enabled) => {
-  try {
-    await AsyncStorage.setItem(STORAGE_KEYS.OFFLINE_MODE, JSON.stringify(enabled));
-    return true;
-  } catch (err) {
-    warn("Failed to save offline mode preference:", err);
-    return false;
-  }
-};
-
-// TTS rate persistence
-export const getTtsRate = async () => {
-  try {
-    const value = await AsyncStorage.getItem(STORAGE_KEYS.TTS_RATE);
-    if (value !== null) {
-      const rate = JSON.parse(value);
-      // Validate rate is between 0.5 and 2.0
-      if (typeof rate === 'number' && rate >= 0.5 && rate <= 2.0) {
-        return rate;
+  Object.keys(DEFAULT_SETTINGS).forEach((key) => {
+    const value = source[key];
+    const fallback = DEFAULT_SETTINGS[key];
+    if (typeof fallback === "boolean") {
+      if (typeof value === "boolean") settings[key] = value;
+    } else if (typeof fallback === "number") {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        settings[key] = clampToStep(value, SETTING_LIMITS[key]);
       }
     }
-    return 1.0; // Default rate
+  });
+
+  if (OVERLAY_COLORS.some((c) => c.value === source.overlayColor)) {
+    settings.overlayColor = source.overlayColor;
+  }
+  if (FONT_FAMILY_IDS.includes(source.fontFamily)) {
+    settings.fontFamily = source.fontFamily;
+  }
+  return settings;
+};
+
+/** Loads settings, migrating preferences saved by earlier versions. */
+export const loadSettings = async () => {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (raw) return normalizeSettings(JSON.parse(raw));
+
+    const legacyRate = await AsyncStorage.getItem(LEGACY_KEYS.TTS_RATE);
+    const settings = normalizeSettings({
+      ttsRate: legacyRate ? JSON.parse(legacyRate) : undefined,
+    });
+    await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+    await AsyncStorage.multiRemove(Object.values(LEGACY_KEYS));
+    return settings;
   } catch (err) {
-    warn("Failed to load TTS rate preference:", err);
-    return 1.0; // Default rate
+    warn("Failed to load settings, using defaults:", err);
+    return { ...DEFAULT_SETTINGS };
   }
 };
 
-export const setTtsRate = async (rate) => {
+export const saveSettings = async (settings) => {
   try {
-    // Validate rate before saving
-    if (typeof rate !== 'number' || rate < 0.5 || rate > 2.0) {
-      warn("Invalid TTS rate value:", rate);
-      return false;
-    }
-    await AsyncStorage.setItem(STORAGE_KEYS.TTS_RATE, JSON.stringify(rate));
-    return true;
+    await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(normalizeSettings(settings)));
   } catch (err) {
-    warn("Failed to save TTS rate preference:", err);
-    return false;
+    warn("Failed to save settings:", err);
   }
 };
