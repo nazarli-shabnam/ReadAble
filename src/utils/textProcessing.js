@@ -131,6 +131,8 @@ const isSentenceEndingPeriod = (text, sentenceStart, dotIndex, nextChar) => {
   const word = text.slice(wordStart, dotIndex).replace(/^[("'“‘[]+/, "");
   const lower = word.toLowerCase();
   if (NON_TERMINAL_ABBREVIATIONS.has(lower)) return false;
+  // "7 p.m. Be early." ends a sentence; checked before the initials rule below.
+  if (lower === "a.m" || lower === "p.m") return true;
   // Initials and dotted acronyms: "J. K. Rowling", "U.S.A."
   if (/^(?:[a-z]\.)*[a-z]$/i.test(word)) return false;
   if (NUMBERING_ABBREVIATIONS.has(lower) && /\d/.test(nextChar || "")) return false;
@@ -340,16 +342,21 @@ const splitClauses = (sentence) => {
   return [head, ...splitClauses(tail)];
 };
 
+const LIST_ITEM = /^(?:[-*•]|\d+[.)])\s/;
+// A line break that only wraps text (not one that starts a list item).
+const WRAPPED_LINE_BREAK = /[ \t]*\n[ \t]*(?!(?:[-*•]|\d+[.)])\s)/g;
+
 /**
  * Produces an easier-to-read version: plainer words, no filler connectives,
- * long sentences split into shorter ones. Paragraph breaks are kept.
+ * long sentences split into shorter ones. Paragraphs (separated by blank
+ * lines) and list items are kept; hard-wrapped lines are joined.
  */
 export const simplifyText = (text) => {
   if (!text) return "";
   return text
-    .split(/\n+/)
+    .split(/\n[ \t]*\n\s*/)
     .map((paragraph) =>
-      splitSentences(paragraph)
+      splitSentences(paragraph.trim().replace(WRAPPED_LINE_BREAK, " "))
         .map((s) =>
           s.text
             .replace(SIMPLER_WORDS_PATTERN, (m) =>
@@ -360,10 +367,10 @@ export const simplifyText = (text) => {
         .flatMap(splitClauses)
         .map(finishSentence)
         .filter(Boolean)
-        .join(" ")
+        .reduce((out, s) => (out ? `${out}${LIST_ITEM.test(s) ? "\n" : " "}${s}` : s), "")
     )
     .filter(Boolean)
-    .join("\n");
+    .join("\n\n");
 };
 
 // ---------------------------------------------------------------------------

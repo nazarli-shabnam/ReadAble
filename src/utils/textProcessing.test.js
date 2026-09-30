@@ -37,6 +37,14 @@ describe("splitSentences", () => {
     ]);
   });
 
+  test("splits after a.m./p.m. at the end of a sentence", () => {
+    expect(texts(splitSentences("Doors open at 7 p.m. Be early."))).toEqual([
+      "Doors open at 7 p.m.",
+      "Be early.",
+    ]);
+    expect(splitSentences("Open 9 a.m. Monday to Friday.")).toHaveLength(2);
+  });
+
   test("keeps numbering abbreviations with their number", () => {
     expect(splitSentences("See No. 5 on the list.")).toHaveLength(1);
   });
@@ -215,8 +223,20 @@ describe("simplifyText", () => {
     expect(simplifyText("Red, and blue.")).toBe("Red, and blue.");
   });
 
-  test("keeps paragraph breaks", () => {
-    expect(simplifyText("First part.\nSecond part")).toBe("First part.\nSecond part.");
+  test("keeps paragraph breaks (blank lines)", () => {
+    expect(simplifyText("First part.\n\nSecond part")).toBe("First part.\n\nSecond part.");
+  });
+
+  test("joins hard-wrapped lines inside a paragraph", () => {
+    expect(simplifyText("The library will\nclose on Monday.\nBring your card.")).toBe(
+      "The library will close on Monday. Bring your card."
+    );
+  });
+
+  test("keeps list items on their own lines", () => {
+    const lines = simplifyText("Bring:\n- a pen\n- your card").split("\n");
+    expect(lines).toHaveLength(3);
+    expect(lines.slice(1)).toEqual(["- a pen.", "- your card."]);
   });
 
   test("handles empty input", () => {

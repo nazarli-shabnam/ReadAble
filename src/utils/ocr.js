@@ -25,7 +25,9 @@ export const runOcrFromImage = async (image) => {
 
   try {
     const result = await recognizer.recognize(image.uri);
-    const text = cleanOcrText((result?.blocks || []).map((b) => b.text));
+    const text = cleanOcrText(
+      (result?.blocks || []).map((b) => (b?.text == null ? "" : String(b.text)))
+    );
     return { status: text ? "ok" : "empty", text };
   } catch (err) {
     // A missing native module (e.g. Expo Go) throws here.
