@@ -140,6 +140,9 @@ export const normalizeSettings = (input) => {
   if (OVERLAY_COLORS.some((c) => c.value === source.overlayColor)) {
     settings.overlayColor = source.overlayColor;
   }
+  if (typeof source.voice === "string" && source.voice.length <= 200) {
+    settings.voice = source.voice;
+  }
   if (FONT_FAMILY_IDS.includes(source.fontFamily)) {
     settings.fontFamily = source.fontFamily;
   }

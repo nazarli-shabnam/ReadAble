@@ -135,3 +135,10 @@ test("exportDocumentSummary lists key information", () => {
   expect(text).toContain("- Amount: $5");
   expect(text).toContain("Simplified text");
 });
+
+test("normalizeSettings keeps a voice identifier and drops invalid ones", () => {
+  expect(normalizeSettings({ voice: "com.apple.voice.Alex" }).voice).toBe("com.apple.voice.Alex");
+  expect(normalizeSettings({ voice: 5 }).voice).toBe("");
+  expect(normalizeSettings({ voice: "x".repeat(300) }).voice).toBe("");
+  expect(normalizeSettings({}).voice).toBe("");
+});

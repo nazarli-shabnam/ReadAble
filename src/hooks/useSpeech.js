@@ -11,23 +11,29 @@ const IDLE = { status: "idle", index: null, total: 0, source: null };
  * so they can never overwrite the state of the current one.
  *
  * @param {number} rate - speech rate; changes apply from the next sentence
+ * @param {string} [voice] - voice identifier; empty means the device default
  * @returns {{
  *   status: "idle"|"speaking"|"paused", index: number|null, total: number,
  *   source: string|null, play: Function, pause: Function, resume: Function,
  *   stop: Function, prev: Function, next: Function
  * }}
  */
-export const useSpeech = (rate = 1) => {
+export const useSpeech = (rate = 1, voice = "") => {
   const [state, setState] = useState(IDLE);
   const sessionRef = useRef(0);
   const sentencesRef = useRef([]);
   const sourceRef = useRef(null);
   const indexRef = useRef(null);
   const rateRef = useRef(rate);
+  const voiceRef = useRef(voice);
+  const voiceOverrideRef = useRef(null);
 
   useEffect(() => {
     rateRef.current = rate;
-  }, [rate]);
+    voiceRef.current = voice;
+  }, [rate, voice]);
+
+  const voiceFor = () => voiceOverrideRef.current ?? voiceRef.current;
 
   const speakFrom = useCallback((startIndex) => {
     const session = ++sessionRef.current;
@@ -47,6 +53,7 @@ export const useSpeech = (rate = 1) => {
       Speech.speak(sentences[i], {
         language: "en-US",
         rate: rateRef.current,
+        ...(voiceFor() ? { voice: voiceFor() } : {}),
         onDone: () => step(i + 1),
         onError: () => {
           if (session !== sessionRef.current) return;
@@ -59,9 +66,14 @@ export const useSpeech = (rate = 1) => {
     step(Math.min(Math.max(0, startIndex), total));
   }, []);
 
-  /** Speaks `sentences` (strings) from `startIndex`; `source` labels what is playing. */
+  /**
+   * Speaks `sentences` (strings) from `startIndex`; `source` labels what is playing.
+   * `voiceOverride` (an identifier, or "" for the default) is used instead of the
+   * chosen voice, e.g. to preview one.
+   */
   const play = useCallback(
-    (sentences, startIndex = 0, source = "document") => {
+    (sentences, startIndex = 0, source = "document", voiceOverride = null) => {
+      voiceOverrideRef.current = voiceOverride;
       sentencesRef.current = sentences.filter((s) => s && s.trim());
       sourceRef.current = source;
       speakFrom(startIndex);

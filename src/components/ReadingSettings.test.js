@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import { DEFAULT_SETTINGS } from "../constants/settings";
 import { ReadingSettings } from "./ReadingSettings";
 
@@ -18,4 +18,21 @@ test("tint controls are replaced by a note in high contrast", () => {
   expect(screen.queryByLabelText("Cream")).toBeNull();
   expect(screen.queryByText("Tint strength")).toBeNull();
   expect(screen.getByText(/not used in high contrast/)).toBeTruthy();
+});
+
+test("choosing a voice saves it and plays a sample with it", () => {
+  const onChange = jest.fn();
+  const speech = { play: jest.fn() };
+  const voices = [{ identifier: "v1", name: "Alex", language: "en-US" }];
+  render(<ReadingSettings settings={DEFAULT_SETTINGS} onChange={onChange} voices={voices} speech={speech} />);
+
+  fireEvent.press(screen.getByText("Device default"));
+  fireEvent.press(screen.getByText("Alex"));
+  expect(onChange).toHaveBeenCalledWith({ voice: "v1" });
+  expect(speech.play).toHaveBeenCalledWith(["This is how I sound."], 0, "preview", "v1");
+});
+
+test("no voice picker when the device lists no English voices", () => {
+  render(<ReadingSettings settings={DEFAULT_SETTINGS} onChange={() => {}} voices={[]} speech={{ play: jest.fn() }} />);
+  expect(screen.queryByText("Voice")).toBeNull();
 });

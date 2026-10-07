@@ -96,6 +96,7 @@ export const ReaderCard = ({
   settings,
   onSettingsChange,
   speech,
+  voices = [],
   readingIndex,
   focusIndex,
   onFocusIndexChange,
@@ -141,7 +142,9 @@ export const ReaderCard = ({
         />
       }
     >
-      {settingsOpen && <ReadingSettings settings={settings} onChange={onSettingsChange} />}
+      {settingsOpen && (
+        <ReadingSettings settings={settings} onChange={onSettingsChange} voices={voices} speech={speech} />
+      )}
 
       {!doc ? (
         <Txt muted>Add some text above and choose “Open in reader”. It will appear here.</Txt>

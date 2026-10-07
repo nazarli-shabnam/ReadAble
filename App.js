@@ -14,6 +14,7 @@ import { Txt } from "./src/components/ui";
 import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
 import { useSettings } from "./src/hooks/useSettings";
 import { useSpeech } from "./src/hooks/useSpeech";
+import { useVoices } from "./src/hooks/useVoices";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
@@ -51,7 +52,10 @@ export default function App() {
     retryLoadHistory,
     runQuestion,
   } = useDocumentProcessor();
-  const speech = useSpeech(settings.ttsRate);
+  const voices = useVoices();
+  // A saved voice that is no longer installed falls back to the device default.
+  const voice = voices.some((v) => v.identifier === settings.voice) ? settings.voice : "";
+  const speech = useSpeech(settings.ttsRate, voice);
   const theme = settings.highContrast ? THEMES.highContrast : THEMES.light;
 
   const scrollRef = useRef(null);
@@ -231,6 +235,7 @@ export default function App() {
                 settings={settings}
                 onSettingsChange={updateSettings}
                 speech={speech}
+                voices={voices}
                 readingIndex={readingIndex}
                 focusIndex={Math.min(focusIndex, Math.max(0, sentences.length - 1))}
                 onFocusIndexChange={setFocusIndex}

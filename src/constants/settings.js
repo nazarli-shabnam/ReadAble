@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   overlayOpacity: 0.4,
   focusMode: false,
   ttsRate: 1,
+  voice: "", // identifier of the chosen speech voice; empty = the device default
 };
 
 export const SETTING_LIMITS = {
