@@ -13,12 +13,13 @@ const VIEW_OPTIONS = [
 
 const PlayerBar = ({ speech, readingIndex, sentenceTexts, rate, onRateChange, disabled }) => {
   const t = useTheme();
-  const active = speech.status !== "idle";
-  const playLabel =
-    speech.status === "speaking" ? "Pause" : speech.status === "paused" ? "Resume" : "Listen";
+  // The same speech engine also reads Q&A answers; this bar only controls the document.
+  const status = speech.source === "document" ? speech.status : "idle";
+  const active = status !== "idle";
+  const playLabel = status === "speaking" ? "Pause" : status === "paused" ? "Resume" : "Listen";
   const onPlay = () => {
-    if (speech.status === "speaking") speech.pause();
-    else if (speech.status === "paused") speech.resume();
+    if (status === "speaking") speech.pause();
+    else if (status === "paused") speech.resume();
     else speech.play(sentenceTexts);
   };
   const progress = readingIndex !== null ? (readingIndex + 1) / speech.total : 0;
@@ -29,7 +30,7 @@ const PlayerBar = ({ speech, readingIndex, sentenceTexts, rate, onRateChange, di
       {readingIndex !== null && (
         <View style={{ gap: 6 }}>
           <Txt variant="caption" muted accessibilityLiveRegion="polite">
-            {speech.status === "paused" ? "Paused on" : "Reading"} sentence {readingIndex + 1} of{" "}
+            {status === "paused" ? "Paused on" : "Reading"} sentence {readingIndex + 1} of{" "}
             {speech.total}
           </Txt>
           <View style={[styles.track, { backgroundColor: t.field, borderColor: t.border }]}>
