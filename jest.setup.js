@@ -7,6 +7,7 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 jest.mock('expo-speech', () => ({
   speak: jest.fn(),
   stop: jest.fn(),
+  getAvailableVoicesAsync: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock('expo-clipboard', () => ({

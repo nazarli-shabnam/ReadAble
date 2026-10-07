@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { warn } from "./logger";
+import { uniqueKeySpans } from "./textProcessing";
 import {
   DEFAULT_SETTINGS,
   SETTING_LIMITS,
   OVERLAY_COLORS,
   FONT_FAMILY_IDS,
+  VIEW_MODE_IDS,
   clampToStep,
 } from "../constants/settings";
 
@@ -12,6 +14,7 @@ export const STORAGE_KEYS = {
   DOCUMENTS: "@readable:documents",
   CORRUPT_DOCUMENTS: "@readable:documents.corrupt",
   SETTINGS: "@readable:settings",
+  POSITIONS: "@readable:positions",
 };
 
 // Keys written by earlier versions.
@@ -21,12 +24,15 @@ const LEGACY_KEYS = {
   HISTORY: "@readable:history",
 };
 
-const MAX_DOCUMENTS = 50;
+export const MAX_DOCUMENTS = 50;
+export const MAX_PINNED = 10;
+const MAX_TITLE_LENGTH = 120;
 
 // ---------------------------------------------------------------------------
 // Documents
 //
-// Only { id, rawText, createdAt } is stored; everything else is derived by
+// Only { id, rawText, createdAt } plus the reader's own choices (an optional
+// custom `title`, and `pinned`) are stored; everything else is derived by
 // buildDocument when a document is opened. Records written by older versions
 // (which also stored derived fields) load the same way.
 // ---------------------------------------------------------------------------
@@ -37,7 +43,19 @@ const toRecord = (doc) => {
   if (typeof id !== "string" || !id) return null;
   if (typeof rawText !== "string" || !rawText.trim()) return null;
   if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) return null;
-  return { id, rawText, createdAt };
+  const record = { id, rawText, createdAt };
+  const title = typeof doc.title === "string" ? doc.title.trim().slice(0, MAX_TITLE_LENGTH) : "";
+  if (title) record.title = title;
+  if (doc.pinned === true) record.pinned = true;
+  return record;
+};
+
+// Newest first; pinned texts always stay, the newest others fill the rest.
+const capRecords = (records) => {
+  const pinned = records.filter((r) => r.pinned);
+  const others = records.filter((r) => !r.pinned);
+  const keep = new Set([...pinned, ...others.slice(0, Math.max(0, MAX_DOCUMENTS - pinned.length))]);
+  return records.filter((r) => keep.has(r));
 };
 
 const writeRecords = (records) =>
@@ -84,10 +102,33 @@ export const saveDocument = async (doc) => {
   const record = toRecord(doc);
   if (!record) throw new Error("Cannot save an invalid document.");
   const existing = await loadDocuments();
-  const others = existing.filter(
-    (r) => r.id !== record.id && r.rawText.trim() !== record.rawText.trim()
-  );
-  await writeRecords([record, ...others].slice(0, MAX_DOCUMENTS));
+  const isSame = (r) => r.id === record.id || r.rawText.trim() === record.rawText.trim();
+  // Saving text that is already saved keeps the title and pin the reader gave it.
+  const previous = existing.find(isSame);
+  const merged = { ...record, ...(previous?.title && !record.title ? { title: previous.title } : {}) };
+  if (previous?.pinned) merged.pinned = true;
+  await writeRecords(capRecords([merged, ...existing.filter((r) => !isSame(r))]));
+};
+
+/**
+ * Renames and/or pins a saved text. `title` "" goes back to the automatic title.
+ * Pinning is refused (returns false) beyond MAX_PINNED.
+ */
+export const updateDocumentMeta = async (docId, { title, pinned }) => {
+  const existing = await loadDocuments();
+  const target = existing.find((r) => r.id === docId);
+  if (!target) return false;
+  if (pinned === true && !target.pinned && existing.filter((r) => r.pinned).length >= MAX_PINNED) {
+    return false;
+  }
+  const { title: _title, pinned: _pinned, ...base } = target;
+  const next = toRecord({
+    ...base,
+    title: title === undefined ? target.title : title,
+    pinned: pinned === undefined ? target.pinned : pinned,
+  });
+  await writeRecords(existing.map((r) => (r.id === docId ? next : r)));
+  return true;
 };
 
 export const deleteDocument = async (docId) => {
@@ -96,6 +137,46 @@ export const deleteDocument = async (docId) => {
 };
 
 export const clearAllDocuments = () => AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
+
+// ---------------------------------------------------------------------------
+// Reading positions
+//
+// Kept apart from the saved texts: { [docId]: ratio } where ratio (0-1) is how
+// far through the text the reader got. A ratio instead of a sentence number
+// stays valid when the Simplified and Original versions split differently.
+// ---------------------------------------------------------------------------
+
+const loadPositions = async () => {
+  try {
+    const parsed = JSON.parse((await AsyncStorage.getItem(STORAGE_KEYS.POSITIONS)) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+/** How far through a saved text the reader got, 0-1 (0 if unknown). */
+export const loadPosition = async (docId) => {
+  const ratio = (await loadPositions())[docId];
+  return typeof ratio === "number" && ratio > 0 && ratio <= 1 ? ratio : 0;
+};
+
+/** Remembers the position; 0 forgets it. Positions of texts that are gone are dropped. */
+export const savePosition = async (docId, ratio) => {
+  try {
+    const known = new Set((await loadDocuments()).map((r) => r.id));
+    const positions = await loadPositions();
+    const next = {};
+    Object.keys(positions).forEach((id) => {
+      if (known.has(id) && id !== docId) next[id] = positions[id];
+    });
+    const clamped = Math.min(1, Math.max(0, Number(ratio) || 0));
+    if (clamped > 0 && known.has(docId)) next[docId] = Math.round(clamped * 1000) / 1000;
+    await AsyncStorage.setItem(STORAGE_KEYS.POSITIONS, JSON.stringify(next));
+  } catch (err) {
+    warn("Failed to save the reading position:", err);
+  }
+};
 
 export const exportDocumentSummary = (doc) => {
   if (!doc) return "";
@@ -106,11 +187,11 @@ export const exportDocumentSummary = (doc) => {
     "Summary",
     doc.summary || "No summary available.",
   ];
-  const { dates = [], amounts = [] } = doc.highlights || {};
-  if (dates.length || amounts.length) {
+  // The same list the Summary card shows: in order of appearance, each value once.
+  const facts = uniqueKeySpans(doc.rawText);
+  if (facts.length) {
     lines.push("", "Key information");
-    dates.forEach((d) => lines.push(`- Date/time: ${d.value}`));
-    amounts.forEach((a) => lines.push(`- Amount: ${a.value}`));
+    facts.forEach((f) => lines.push(`- ${f.type === "date" ? "Date/time" : "Amount"}: ${f.value}`));
   }
   lines.push("", "Simplified text", doc.simplifiedText || doc.rawText);
   return lines.join("\n");
@@ -139,6 +220,12 @@ export const normalizeSettings = (input) => {
 
   if (OVERLAY_COLORS.some((c) => c.value === source.overlayColor)) {
     settings.overlayColor = source.overlayColor;
+  }
+  if (typeof source.voice === "string" && source.voice.length <= 200) {
+    settings.voice = source.voice;
+  }
+  if (VIEW_MODE_IDS.includes(source.viewMode)) {
+    settings.viewMode = source.viewMode;
   }
   if (FONT_FAMILY_IDS.includes(source.fontFamily)) {
     settings.fontFamily = source.fontFamily;

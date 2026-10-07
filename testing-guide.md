@@ -4,19 +4,24 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 
 ## Add text
 - **Try an example**, then **Open in reader**. The page scrolls to the reader.
-- **Choose a photo** with printed text. The text box fills with the recognized text, with wrapped lines joined. In Expo Go you get a message saying scanning needs a development build.
+- **Choose a photo** with printed text. The text box fills with the recognized text, with wrapped lines joined. Scanning again adds the new text below what is already there instead of replacing it (use **Clear** to start over). In Expo Go you get a message saying scanning needs a development build.
 - Choosing a blank photo shows "No text found" and leaves the text box unchanged.
+- **Open a text file** (.txt or .md) adds its text below what is already in the box. A file over 1 MB or an empty one shows a message.
 - **Open in reader** stays disabled while the text box is empty.
 
 ## Reader
-- In the example text, `March 12, 2025`, `6:00 PM`, `5:00 PM` and `March 10, 2025` are yellow and `12$` is green. Nothing else is marked.
+- In the example text, `March 12, 2025`, `6:00 PM`, `5:00 PM` and `March 10, 2025` are yellow and underlined and `12$` is green. Nothing else is marked.
 - Switch between **Simplified** and **Original**: the marks stay on the right words in both.
 - **Aa** opens the reading settings. Change the font (Atkinson, Lexend, System), text size, line spacing, letter spacing and background tint, then restart the app. All of them are kept.
 - **High contrast** makes every card black on white with bold outlines.
+- **Reset to defaults** (bottom of the settings) asks first, then restores every reading setting. The Simplified/Original choice is also kept after a restart.
+- **Copy text** copies the version currently shown and says "Copied ✓" for about 2 seconds.
 - **Focus mode** shows one sentence with "Sentence x of y" and Previous and Next buttons.
+- **Reading ruler** dims everything except two lines; **Line up** / **Line down** move it and the caption shows which lines are lit. It is not used in focus mode.
 
 ## Listen
 - Tap the second sentence. Speech starts there and that sentence is highlighted.
+- Listen to a few sentences, press **Stop**, then close and reopen the app: the button now says **Continue** and starts from where you stopped; **From the start** restarts. Reading to the end resets it.
 - **Pause**, then **Resume**: the same sentence starts again from its beginning.
 - ⏮ and ⏭ move one sentence. **Stop** clears the highlight.
 - Change the voice speed while listening. The next sentence uses the new speed.

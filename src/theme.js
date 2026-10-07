@@ -19,11 +19,12 @@ const light = {
   dangerSoft: "#F6E3DF",
   disabled: "#B7C2BC",
   onDisabled: "#5E6B72",
-  reading: "#D4E8FF",
-  date: "#FFF0C2",
-  onDate: "#5A4410",
-  amount: "#D3F2E2",
-  onAmount: "#0E4D31",
+  // Mid-tone marks: they stay visible on every reading tint (see theme.test.js).
+  reading: "#7FB8F5",
+  date: "#F5B93C",
+  onDate: "#3A2A00",
+  amount: "#5CC48A",
+  onAmount: "#06301D",
   switchTrack: "#B7C2BC",
   focus: "#1F5E66",
 };

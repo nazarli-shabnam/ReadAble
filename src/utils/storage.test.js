@@ -8,6 +8,9 @@ import {
   loadSettings,
   saveSettings,
   exportDocumentSummary,
+  updateDocumentMeta,
+  MAX_DOCUMENTS,
+  MAX_PINNED,
 } from "./storage";
 import { DEFAULT_SETTINGS } from "../constants/settings";
 import { buildDocument } from "./textProcessing";
@@ -128,10 +131,73 @@ describe("settings", () => {
   });
 });
 
+test("exportDocumentSummary lists each key detail once, in order of appearance", () => {
+  const doc = buildDocument("Fee $5 due March 5. We close March 5. Late fee $5 after 6:00 PM.");
+  const lines = exportDocumentSummary(doc).split("\n").filter((l) => l.startsWith("- "));
+  expect(lines).toEqual([
+    "- Amount: $5",
+    "- Date/time: March 5",
+    "- Date/time: 6:00 PM",
+  ]);
+});
+
 test("exportDocumentSummary lists key information", () => {
   const doc = buildDocument("Pay $5 by March 3, 2025. Thanks.");
   const text = exportDocumentSummary(doc);
   expect(text).toContain("- Date/time: March 3, 2025");
   expect(text).toContain("- Amount: $5");
   expect(text).toContain("Simplified text");
+});
+
+describe("titles and pins", () => {
+  const save = (id, text) => saveDocument(buildDocument(text, { id }));
+
+  test("a custom title and a pin are stored and survive loading", async () => {
+    await save("a", "First text here.");
+    expect(await updateDocumentMeta("a", { title: "  Tax letter  ", pinned: true })).toBe(true);
+    expect((await loadDocuments())[0]).toMatchObject({ id: "a", title: "Tax letter", pinned: true });
+
+    await updateDocumentMeta("a", { title: "", pinned: false });
+    expect(Object.keys((await loadDocuments())[0]).sort()).toEqual(["createdAt", "id", "rawText"]);
+  });
+
+  test("saving the same text again keeps its title and pin", async () => {
+    await save("a", "Same text.");
+    await updateDocumentMeta("a", { title: "Mine", pinned: true });
+    await save("b", "Same text.");
+    const records = await loadDocuments();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ id: "b", title: "Mine", pinned: true });
+  });
+
+  test("pinned texts are never pushed out by the cap", async () => {
+    await save("keep", "Keep this one.");
+    await updateDocumentMeta("keep", { pinned: true });
+    for (let i = 0; i < MAX_DOCUMENTS + 3; i++) await save(`n${i}`, `Text number ${i}.`);
+    const records = await loadDocuments();
+    expect(records).toHaveLength(MAX_DOCUMENTS);
+    expect(records.some((r) => r.id === "keep")).toBe(true);
+    expect(records[0].id).toBe(`n${MAX_DOCUMENTS + 2}`);
+  });
+
+  test("refuses to pin more than the limit", async () => {
+    for (let i = 0; i <= MAX_PINNED; i++) await save(`p${i}`, `Pinned candidate ${i}.`);
+    for (let i = 0; i < MAX_PINNED; i++) {
+      expect(await updateDocumentMeta(`p${i}`, { pinned: true })).toBe(true);
+    }
+    expect(await updateDocumentMeta(`p${MAX_PINNED}`, { pinned: true })).toBe(false);
+    expect(await updateDocumentMeta("missing", { pinned: true })).toBe(false);
+  });
+});
+
+test("normalizeSettings keeps a voice identifier and drops invalid ones", () => {
+  expect(normalizeSettings({ voice: "com.apple.voice.Alex" }).voice).toBe("com.apple.voice.Alex");
+  expect(normalizeSettings({ voice: 5 }).voice).toBe("");
+  expect(normalizeSettings({ voice: "x".repeat(300) }).voice).toBe("");
+  expect(normalizeSettings({}).voice).toBe("");
+});
+
+test("normalizeSettings keeps a valid view mode and drops unknown ones", () => {
+  expect(normalizeSettings({ viewMode: "original" }).viewMode).toBe("original");
+  expect(normalizeSettings({ viewMode: "sideways" }).viewMode).toBe("simplified");
 });

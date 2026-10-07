@@ -11,7 +11,10 @@ export const DEFAULT_SETTINGS = {
   overlayColor: "#fef3c7",
   overlayOpacity: 0.4,
   focusMode: false,
+  readingRuler: false, // dim all but a couple of lines, movable line by line
   ttsRate: 1,
+  viewMode: "simplified", // which version of the text the reader shows
+  voice: "", // identifier of the chosen speech voice; empty = the device default
 };
 
 export const SETTING_LIMITS = {
@@ -36,4 +39,5 @@ export const OVERLAY_COLORS = [
   { value: "#ffe4e6", label: "Rose" },
 ];
 
+export const VIEW_MODE_IDS = ["simplified", "original"];
 export const FONT_FAMILY_IDS = ["atkinson", "lexend", "system"];

@@ -95,3 +95,27 @@ test("stops speech on unmount", () => {
   unmount();
   expect(Speech.stop).toHaveBeenCalled();
 });
+
+test("speaks with the chosen voice, and with the default when none is set", () => {
+  const { result, rerender } = renderHook(({ voice }) => useSpeech(1, voice), {
+    initialProps: { voice: "com.example.voice" },
+  });
+  act(() => result.current.play(SENTENCES));
+  expect(call(0).voice).toBe("com.example.voice");
+
+  rerender({ voice: "" });
+  act(() => result.current.play(SENTENCES));
+  expect(call(1)).not.toHaveProperty("voice");
+});
+
+test("a voice override (a preview) wins over the chosen voice, once", () => {
+  const { result } = renderHook(() => useSpeech(1, "chosen"));
+  act(() => result.current.play(["Sample."], 0, "preview", "other"));
+  expect(call(0).voice).toBe("other");
+
+  act(() => result.current.play(["Sample."], 0, "preview", ""));
+  expect(call(1)).not.toHaveProperty("voice");
+
+  act(() => result.current.play(SENTENCES));
+  expect(call(2).voice).toBe("chosen");
+});

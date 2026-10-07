@@ -1,6 +1,6 @@
 import { StyleSheet, View } from "react-native";
 import { useTheme } from "../theme";
-import { findKeySpans } from "../utils/textProcessing";
+import { uniqueKeySpans } from "../utils/textProcessing";
 import { Button, Card, Txt } from "./ui";
 
 // Assumes a gentle 150 words per minute rather than the usual 200-250.
@@ -21,7 +21,10 @@ const Fact = ({ kind, value }) => {
       ]}
       accessibilityLabel={`${kind === "date" ? "Date or time" : "Amount"}: ${value}`}
     >
-      <Txt variant="label" style={{ color: colors[1] }}>
+      <Txt
+        variant="label"
+        style={{ color: colors[1], textDecorationLine: kind === "date" ? "underline" : "none" }}
+      >
         {value}
       </Txt>
     </View>
@@ -32,9 +35,7 @@ export const SummaryCard = ({ doc, onShare }) => {
   if (!doc) return null;
   const words = doc.rawText.split(/\s+/).filter(Boolean).length;
   const minutes = Math.max(1, Math.round(words / WORDS_PER_MINUTE));
-  // Key details in the order they appear, each value once.
-  const seen = new Set();
-  const facts = findKeySpans(doc.rawText).filter((f) => !seen.has(f.value) && seen.add(f.value));
+  const facts = uniqueKeySpans(doc.rawText);
 
   return (
     <Card
