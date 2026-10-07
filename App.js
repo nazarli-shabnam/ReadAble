@@ -38,6 +38,9 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [viewMode, setViewMode] = useState("simplified");
   const [focusIndex, setFocusIndex] = useState(0);
+  // Sentence of the original text that a Q&A answer came from, marked in the reader.
+  const [markedIndex, setMarkedIndex] = useState(null);
+  const pendingFocus = useRef(null);
   const [settings, updateSettings] = useSettings();
   const {
     activeDoc,
@@ -72,7 +75,10 @@ export default function App() {
   const { stop: stopSpeech } = speech;
   useEffect(() => {
     stopSpeech();
-    setFocusIndex(0);
+    const pending = pendingFocus.current;
+    pendingFocus.current = null;
+    setFocusIndex(pending ?? 0);
+    if (pending === null) setMarkedIndex(null);
   }, [viewText, stopSpeech]);
 
   // Focus mode follows the sentence being read aloud.
@@ -175,6 +181,18 @@ export default function App() {
     }
   };
 
+  // Answers come from the original text, so show that version with the sentence marked.
+  const handleShowAnswer = (index) => {
+    if (viewMode === "original") {
+      setFocusIndex(index);
+    } else {
+      pendingFocus.current = index;
+      setViewMode("original");
+    }
+    setMarkedIndex(index);
+    scrollToReader();
+  };
+
   const handleOpen = (docId) => {
     loadDocument(docId);
     scrollToReader();
@@ -231,6 +249,7 @@ export default function App() {
                 onSettingsChange={updateSettings}
                 speech={speech}
                 readingIndex={readingIndex}
+                markedIndex={markedIndex}
                 focusIndex={Math.min(focusIndex, Math.max(0, sentences.length - 1))}
                 onFocusIndexChange={setFocusIndex}
                 onLayout={(e) => {
@@ -240,7 +259,7 @@ export default function App() {
 
               <SummaryCard doc={activeDoc} onShare={handleShare} />
 
-              <QuestionCard docId={activeDoc?.id} ask={runQuestion} speech={speech} />
+              <QuestionCard docId={activeDoc?.id} ask={runQuestion} speech={speech} onShow={handleShowAnswer} />
 
               <HistoryCard
                 history={history}

@@ -97,6 +97,7 @@ export const ReaderCard = ({
   onSettingsChange,
   speech,
   readingIndex,
+  markedIndex,
   focusIndex,
   onFocusIndexChange,
   onLayout,
@@ -124,6 +125,8 @@ export const ReaderCard = ({
   };
   const listenFrom = (index) => speech.play(sentenceTexts, index);
 
+  // The sentence being read aloud wins over a sentence marked from a Q&A answer.
+  const activeIndex = readingIndex ?? markedIndex;
   const focusSentence = sentences[focusIndex];
   const focusText = focusSentence?.text || "";
 
@@ -160,7 +163,7 @@ export const ReaderCard = ({
                 <HighlightedText
                   text={focusText}
                   sentences={[{ start: 0, end: focusText.length }]}
-                  activeSentenceIndex={readingIndex === focusIndex ? 0 : null}
+                  activeSentenceIndex={activeIndex === focusIndex ? 0 : null}
                   onSentencePress={() => listenFrom(focusIndex)}
                   style={textStyle}
                   highlightStyle={highlightStyle}
@@ -189,7 +192,7 @@ export const ReaderCard = ({
               <HighlightedText
                 text={text}
                 sentences={sentences}
-                activeSentenceIndex={readingIndex}
+                activeSentenceIndex={activeIndex}
                 onSentencePress={listenFrom}
                 style={textStyle}
                 highlightStyle={highlightStyle}

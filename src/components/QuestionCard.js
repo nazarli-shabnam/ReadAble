@@ -9,7 +9,7 @@ import { Button, Card, Txt } from "./ui";
  * Ask about the active document. `ask(question)` returns
  * { found, answer, confidence, source }.
  */
-export const QuestionCard = ({ docId, ask, speech }) => {
+export const QuestionCard = ({ docId, ask, speech, onShow }) => {
   const t = useTheme();
   const [question, setQuestion] = useState("");
   const [result, setResult] = useState(null);
@@ -75,9 +75,14 @@ export const QuestionCard = ({ docId, ask, speech }) => {
             <>
               <Txt>{result.answer}</Txt>
               <Txt variant="caption" muted>
-                From sentence {result.source.sentenceIndex + 1}. Match: {result.confidence}%.
+                Match: {result.confidence}%.
               </Txt>
               <View style={styles.row}>
+                <Button
+                  label="Show in text"
+                  accessibilityHint="Opens the original text with this sentence marked"
+                  onPress={() => onShow(result.source.sentenceIndex)}
+                />
                 <Button
                   label={readingAnswer ? "Stop reading" : "Read aloud"}
                   onPress={() =>
