@@ -8,7 +8,7 @@ Built with Expo SDK 54 (React Native 0.81, React 19). Runs on iOS, Android and t
 
 - **Add text**: scan with the camera, choose a photo, paste, or type. On-device OCR uses ML Kit (Android) and Apple Vision (iOS) in native builds, and tesseract.js on the web.
 - **Reader**
-  - Simplified view: plainer words ("utilize" becomes "use"), filler words like "furthermore" removed, long sentences split. Dates, times and amounts are never altered.
+  - Simplified view: plainer words ("utilize" becomes "use"), filler words like "furthermore" removed, long sentences split. Hold a sentence (or use "Show original wording" in focus mode) to see what it said before. Dates, times and amounts are never altered.
   - Dates and times are marked in yellow and amounts in green.
   - Reading settings: Atkinson Hyperlegible, Lexend or the system font; text size; line spacing (1.2–2.5×); letter spacing; a colored background tint; high contrast; focus mode (one sentence at a time).
 - **Listen**: tap any sentence to hear the text from there. The sentence being read is highlighted, focus mode follows along, and you can pause, resume, skip and change the voice speed.

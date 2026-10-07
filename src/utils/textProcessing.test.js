@@ -5,6 +5,8 @@ import {
   extractKeySpans,
   summarizeText,
   simplifyText,
+  simplifyWithSources,
+  originalAt,
   answerQuestion,
   buildDocument,
 } from "./textProcessing";
@@ -13,6 +15,12 @@ import { SAMPLE_TEXT } from "../constants/sampleText";
 const texts = (sentences) => sentences.map((s) => s.text);
 
 describe("splitSentences", () => {
+  it("starts a new sentence at heading and label lines", () => {
+    const parts = splitSentences("INVOICE\nTotal due: $50\nDue date: March 5, 2026").map((x) => x.text);
+    expect(parts).toEqual(["INVOICE", "Total due: $50", "Due date: March 5, 2026"]);
+    expect(splitSentences("The library will\nclose on Monday.")).toHaveLength(1);
+  });
+
   test("splits simple sentences", () => {
     expect(texts(splitSentences("Hello world. This is a test. Another sentence!"))).toEqual([
       "Hello world.",
@@ -135,6 +143,24 @@ describe("findKeySpans", () => {
     expect(values("You may bring 3 friends in March. Room 12 is open.")).toEqual([]);
   });
 
+  test("does not mark weights, version numbers or durations", () => {
+    expect(values("The box weighs 10 pounds. Version 1.2.34 shipped. Run 1:30:45 long.")).toEqual([]);
+    expect(values("It costs £5 or 5 GBP, 50 cents.")).toEqual([
+      "amount:£5",
+      "amount:5 GBP",
+      "amount:50 cents",
+    ]);
+  });
+
+  test("accepts only plausible numeric dates and times", () => {
+    expect(values("On 12.03.2025 or 3-12-25 at 23:59.")).toEqual([
+      "date:12.03.2025",
+      "date:3-12-25",
+      "date:23:59",
+    ]);
+    expect(values("Ratio 99/99/99 and 25:61.")).toEqual([]);
+  });
+
   test("recognises common date formats", () => {
     expect(values("12 March 2025, Mar 2025, 2025-03-12, 12/03/2025, 5 pm, 7 p.m.")).toEqual([
       "date:12 March 2025",
@@ -191,6 +217,49 @@ describe("summarizeText", () => {
 });
 
 describe("simplifyText", () => {
+  it("keeps heading and label lines apart without inventing periods", () => {
+    expect(simplifyText("INVOICE\nTotal due: $50\nDue date: March 5, 2026")).toBe(
+      "INVOICE\nTotal due: $50\nDue date: March 5, 2026"
+    );
+    expect(simplifyText("Terms\nPlease pay within 30 days of the invoice date.")).toBe(
+      "Terms\nPlease pay within 30 days of the invoice date."
+    );
+  });
+
+  it("does not split a list at its final \", and\"", () => {
+    const list = "You need to bring a signed form, a valid passport, and the original receipt from the store.";
+    expect(simplifyText(list)).toBe(list);
+    expect(simplifyText("The fee is 1,000 dollars per year, and the deposit is due on arrival.")).toBe(
+      "The fee is 1,000 dollars per year. The deposit is due on arrival."
+    );
+  });
+
+  it("only removes connectives used as sentence openers", () => {
+    expect(simplifyText("In addition, bring your ID.")).toBe("Bring your ID.");
+    expect(simplifyText("In addition to the fee, you must bring your ID card.")).toBe(
+      "In addition to the fee, you must bring your ID card."
+    );
+    expect(simplifyText("Thus far, we have received nothing.")).toBe("Thus far, we have received nothing.");
+    expect(simplifyText("Also known as the Fee.")).toBe("Also known as the Fee.");
+    expect(simplifyText("Also, bring a pen.")).toBe("Bring a pen.");
+  });
+
+  it("keeps a/an correct after a replacement", () => {
+    expect(simplifyText("This requires an additional fee of $5.")).toBe("This needs an extra fee of $5.");
+    expect(simplifyText("An additional fee applies.")).toBe("An extra fee applies.");
+  });
+
+  it("leaves words that are often nouns alone", () => {
+    expect(simplifyText("Please make an attempt to call us.")).toBe("Please make an attempt to call us.");
+    expect(simplifyText("Proof of purchase is needed.")).toBe("Proof of purchase is needed.");
+  });
+
+  it("replaces verb inflections consistently", () => {
+    expect(simplifyText("We are utilizing the form.")).toBe("We are using the form.");
+    expect(simplifyText("He obtained a permit.")).toBe("He got a permit.");
+    expect(simplifyText("The plan initiates later.")).toBe("The plan starts later.");
+  });
+
   test("never produces double periods and keeps dates and numbers intact", () => {
     const result = simplifyText(SAMPLE_TEXT);
     expect(result).not.toMatch(/\.\./);
@@ -244,6 +313,33 @@ describe("simplifyText", () => {
   });
 });
 
+describe("simplifyWithSources", () => {
+  const raw = "However, you must utilize the side door; it is the only entrance for visitors today.\n\nThe fee is $20.";
+  const { text, sources } = simplifyWithSources(raw);
+
+  test("returns the same text as simplifyText", () => {
+    expect(text).toBe(simplifyText(raw));
+  });
+
+  test("maps every simplified sentence back to its original wording", () => {
+    splitSentences(text).forEach((sentence) => {
+      const original = originalAt(sources, sentence.start);
+      expect(original).not.toBeNull();
+    });
+    // Both halves of a split sentence share one original.
+    const first = splitSentences(text)[0];
+    const second = splitSentences(text)[1];
+    expect(originalAt(sources, first.start)).toBe(originalAt(sources, second.start));
+    expect(originalAt(sources, first.start)).toMatch(/^However, you must utilize/);
+    expect(originalAt(sources, text.indexOf("The fee"))).toBe("The fee is $20.");
+  });
+
+  test("ranges point at the simplified text", () => {
+    sources.forEach((src) => expect(text.slice(src.start, src.end).length).toBeGreaterThan(0));
+    expect(originalAt(sources, text.length + 5)).toBeNull();
+  });
+});
+
 describe("answerQuestion", () => {
   const doc = buildDocument(SAMPLE_TEXT);
 
@@ -290,6 +386,7 @@ describe("buildDocument", () => {
         rawText: expect.any(String),
         summary: expect.any(String),
         simplifiedText: expect.any(String),
+        simplifiedSources: expect.any(Array),
         highlights: { dates: [], amounts: [] },
         createdAt: expect.any(String),
       })

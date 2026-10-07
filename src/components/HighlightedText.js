@@ -9,6 +9,7 @@ import { useTheme } from "../theme";
  *
  * @param {Array<{start: number, end: number}>} sentences - sentence ranges in `text`
  * @param {(index: number) => void} [onSentencePress] - makes each sentence tappable
+ * @param {(index: number) => void} [onSentenceLongPress] - called when a sentence is held
  */
 export const HighlightedText = ({
   text,
@@ -17,6 +18,7 @@ export const HighlightedText = ({
   sentences = [],
   activeSentenceIndex = null,
   onSentencePress,
+  onSentenceLongPress,
 }) => {
   const t = useTheme();
   const spans = useMemo(() => findKeySpans(text), [text]);
@@ -72,6 +74,11 @@ export const HighlightedText = ({
             onPress={
               onSentencePress && seg.sentence !== null
                 ? () => onSentencePress(seg.sentence)
+                : undefined
+            }
+            onLongPress={
+              onSentenceLongPress && seg.sentence !== null
+                ? () => onSentenceLongPress(seg.sentence)
                 : undefined
             }
             suppressHighlighting

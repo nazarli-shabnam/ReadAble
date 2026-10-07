@@ -10,6 +10,8 @@ const generateId = () => {
 const MONTH =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
 const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
+// A day or month number in a numeric date: 1-31.
+const DAY_NUM = "(?:0?[1-9]|[12]\\d|3[01])";
 // "p.m" not "p.m." so a sentence-ending period is never swallowed.
 const MERIDIEM = "(?:[ap]\\.m|[ap]m)";
 
@@ -19,14 +21,16 @@ const DATE_SOURCE = [
   `${DAY}\\s+(?:of\\s+)?${MONTH}(?:,?\\s+\\d{4})?`, // 12 March 2025
   `${MONTH},?\\s+\\d{4}`, // March 2025
   "\\d{4}-\\d{2}-\\d{2}", // 2025-03-12
-  "\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}", // 12/03/2025
-  `\\d{1,2}:\\d{2}(?:\\s?${MERIDIEM})?`, // 6:00 PM
+  `${DAY_NUM}[/-]${DAY_NUM}[/-](?:\\d{4}|\\d{2})`, // 12/03/2025, 3-12-25
+  `${DAY_NUM}\\.${DAY_NUM}\\.\\d{4}`, // 12.03.2025 (a dotted 2-digit year is a version number)
+  `(?:[01]?\\d|2[0-3]):[0-5]\\d(?![:.]\\d)(?:\\s?${MERIDIEM})?`, // 6:00 PM, not 1:30:45
   `\\d{1,2}\\s?${MERIDIEM}`, // 5 PM
 ].join("|");
 
 const NUMBER = "(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?";
 const CURRENCY_SYMBOL = "[$€£¥₹]";
-const CURRENCY_WORD = "(?:USD|EUR|GBP|dollars?|euros?|pounds?|cents?)";
+// "pounds" is left out on purpose: "10 pounds" is as often a weight as money (use £ or GBP).
+const CURRENCY_WORD = "(?:USD|EUR|GBP|dollars?|euros?|cents?)";
 
 // Money requires a currency marker before or after the number.
 const MONEY_SOURCE = [
@@ -125,6 +129,25 @@ const NUMBERING_ABBREVIATIONS = new Set("no vol pp fig ch sec art".split(" "));
 const CLOSING_PUNCTUATION = /[.!?"'”’)\]]/;
 const SENTENCE_START = /[A-Z0-9"'“‘(\[]/;
 
+// Words a wrapped line can end on while the sentence carries on below.
+const WRAP_CONTINUATION = /\b(?:a|an|the|to|of|in|on|at|for|and|or|with|by|from|is|are)$/i;
+const SENTENCE_END = /[.!?]["'”’)\]]*$/;
+
+/**
+ * Whether the line break between two lines is structure (a heading, a
+ * "Label: value" line, an address line) rather than hard-wrapping. Wrapped
+ * prose lines are long, end mid-sentence and continue in lowercase; short
+ * unpunctuated lines followed by a capital or number are kept apart.
+ */
+export const keepsLineBreak = (prev, next) => {
+  const p = prev.trim();
+  const n = next.trim();
+  if (!p || !n || SENTENCE_END.test(p) || /^[a-z]/.test(n) || WRAP_CONTINUATION.test(p)) {
+    return false;
+  }
+  return p.endsWith(":") || wordCount(p) <= 5;
+};
+
 const isSentenceEndingPeriod = (text, sentenceStart, dotIndex, nextChar) => {
   let wordStart = dotIndex;
   while (wordStart > sentenceStart && !/\s/.test(text[wordStart - 1])) wordStart--;
@@ -168,7 +191,15 @@ export const splitSentences = (text) => {
       while (next < text.length && /[ \t\r]/.test(text[next])) next++;
       const blankLine = text[next] === "\n";
       const bulletLine = /^(?:[-*•]\s|\d+[.)]\s)/.test(text.slice(next, next + 4));
-      if (blankLine || bulletLine) {
+      const lineEnd = text.indexOf("\n", next);
+      const structural =
+        !blankLine &&
+        !bulletLine &&
+        keepsLineBreak(
+          text.slice(text.lastIndexOf("\n", i - 1) + 1, i),
+          text.slice(next, lineEnd === -1 ? text.length : lineEnd)
+        );
+      if (blankLine || bulletLine || structural) {
         push(start, i);
         start = i + 1;
       }
@@ -257,32 +288,46 @@ const SIMPLER_WORDS = {
   "at this point in time": "now",
   "a large number of": "many",
   "with regard to": "about",
-  "in addition": "also",
   regarding: "about",
   utilize: "use",
   utilise: "use",
   utilizes: "uses",
   utilized: "used",
+  utilising: "using",
+  utilizing: "using",
+  utilised: "used",
+  utilises: "uses",
   approximately: "about",
   commence: "start",
   commences: "starts",
+  commenced: "started",
+  commencing: "starting",
   initiate: "start",
-  purchase: "buy",
-  purchased: "bought",
+  initiates: "starts",
+  initiated: "started",
+  initiating: "starting",
   assistance: "help",
-  sufficient: "enough",
-  additional: "more",
+  // "extra" (not "more") so a preceding "a"/"an" stays correct.
+  additional: "extra",
   numerous: "many",
   terminate: "end",
+  terminates: "ends",
   terminated: "ended",
+  terminating: "ending",
   obtain: "get",
+  obtains: "gets",
+  obtained: "got",
+  obtaining: "getting",
   require: "need",
   requires: "needs",
   required: "needed",
+  requiring: "needing",
   demonstrate: "show",
+  demonstrates: "shows",
+  demonstrated: "showed",
   facilitate: "help",
-  endeavor: "try",
-  attempt: "try",
+  facilitates: "helps",
+  facilitated: "helped",
   inquire: "ask",
   notify: "tell",
   inform: "tell",
@@ -311,13 +356,17 @@ const matchCase = (source, replacement) => {
   return replacement;
 };
 
+// Only the opening filler word followed by a comma: "In addition to the fee"
+// and "Thus far," are phrases, not connectives, and must stay.
 const LEADING_CONNECTIVE =
-  /^(?:however|therefore|moreover|furthermore|additionally|consequently|nevertheless|thus|hence|also)\b,?\s*/i;
+  /^(?:however|therefore|moreover|furthermore|additionally|consequently|nevertheless|thus|hence|also|in addition),\s*/i;
 const INNER_CONNECTIVE =
   /,\s*(?:however|therefore|moreover|furthermore|consequently|nevertheless)\s*,/gi;
 // Split points inside a long sentence: "; " and ", but/and/so/yet/or ".
 const CLAUSE_SPLIT = /;\s+|,\s+(?=(?:but|and|so|yet|or)\s)/i;
 const MIN_CLAUSE_WORDS = 5;
+// A comma that is not a thousands separator or decimal comma inside a number.
+const LIST_COMMA = /(?<!\d),|,(?!\d{3})/;
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -339,39 +388,89 @@ const splitClauses = (sentence) => {
   if (wordCount(head) < MIN_CLAUSE_WORDS || wordCount(tail) < MIN_CLAUSE_WORDS) {
     return [sentence];
   }
+  // "a form, a passport, and a receipt" is a list, not two clauses.
+  if (match[0].startsWith(",") && LIST_COMMA.test(head)) return [sentence];
   return [head, ...splitClauses(tail)];
 };
 
 const LIST_ITEM = /^(?:[-*•]|\d+[.)])\s/;
-// A line break that only wraps text (not one that starts a list item).
-const WRAPPED_LINE_BREAK = /[ \t]*\n[ \t]*(?!(?:[-*•]|\d+[.)])\s)/g;
+
+// Joins hard-wrapped lines with a space; list items and structural line
+// breaks (see keepsLineBreak) stay on their own lines.
+const joinWrappedLines = (paragraph) => {
+  const lines = paragraph.split(/[ \t]*\n[ \t]*/);
+  return lines.reduce((out, line, i) => {
+    if (i === 0) return line;
+    const sep = LIST_ITEM.test(line) || keepsLineBreak(lines[i - 1], line) ? "\n" : " ";
+    return `${out}${sep}${line}`;
+  });
+};
+
+const simplifySentence = (sentence) =>
+  sentence
+    .replace(SIMPLER_WORDS_PATTERN, (m) => matchCase(m, SIMPLER_WORDS[m.toLowerCase()]))
+    .replace(INNER_CONNECTIVE, "");
 
 /**
  * Produces an easier-to-read version: plainer words, no filler connectives,
  * long sentences split into shorter ones. Paragraphs (separated by blank
- * lines) and list items are kept; hard-wrapped lines are joined.
+ * lines), list items and heading/label lines are kept on their own lines;
+ * hard-wrapped lines are joined.
+ *
+ * @returns {{text: string, sources: Array<{start: number, end: number, original: string}>}}
+ *   the simplified text, and for each original sentence the range of `text`
+ *   it became and its original wording
  */
-export const simplifyText = (text) => {
-  if (!text) return "";
-  return text
-    .split(/\n[ \t]*\n\s*/)
-    .map((paragraph) =>
-      splitSentences(paragraph.trim().replace(WRAPPED_LINE_BREAK, " "))
-        .map((s) =>
-          s.text
-            .replace(SIMPLER_WORDS_PATTERN, (m) =>
-              matchCase(m, SIMPLER_WORDS[m.toLowerCase()])
-            )
-            .replace(INNER_CONNECTIVE, "")
-        )
-        .flatMap(splitClauses)
-        .map(finishSentence)
-        .filter(Boolean)
-        .reduce((out, s) => (out ? `${out}${LIST_ITEM.test(s) ? "\n" : " "}${s}` : s), "")
-    )
-    .filter(Boolean)
-    .join("\n\n");
+export const simplifyWithSources = (text) => {
+  if (!text) return { text: "", sources: [] };
+  const paragraphs = text.split(/\n[ \t]*\n\s*/).map((paragraph) => {
+    const joined = joinWrappedLines(paragraph.trim());
+    const sentences = splitSentences(joined);
+    const lineBreakBetween = (i) =>
+      i >= 0 && i < sentences.length - 1 &&
+      joined.slice(sentences[i].end, sentences[i + 1].start).includes("\n");
+
+    let out = "";
+    const sources = [];
+    sentences.forEach((s, i) => {
+      const pieces = splitClauses(simplifySentence(s.text)).map(finishSentence).filter(Boolean);
+      // A heading or "Label: value" line is not a sentence: don't invent a period.
+      const nextIsList = i + 1 < sentences.length && LIST_ITEM.test(sentences[i + 1].text);
+      const standalone =
+        !LIST_ITEM.test(s.text) &&
+        !SENTENCE_END.test(s.text) &&
+        (lineBreakBetween(i - 1) || (lineBreakBetween(i) && !nextIsList));
+      if (standalone && pieces.length === 1) pieces[0] = pieces[0].replace(/\.$/, "");
+
+      let start = null;
+      pieces.forEach((piece, j) => {
+        const sep = out ? (j === 0 && lineBreakBetween(i - 1) ? "\n" : " ") : "";
+        if (start === null) start = out.length + sep.length;
+        out += sep + piece;
+      });
+      if (start !== null) sources.push({ start, end: out.length, original: s.text });
+    });
+    return { text: out, sources };
+  });
+
+  let result = "";
+  const sources = [];
+  paragraphs.forEach((paragraph) => {
+    if (!paragraph.text) return;
+    if (result) result += "\n\n";
+    paragraph.sources.forEach((src) =>
+      sources.push({ ...src, start: src.start + result.length, end: src.end + result.length })
+    );
+    result += paragraph.text;
+  });
+  return { text: result, sources };
 };
+
+export const simplifyText = (text) => simplifyWithSources(text).text;
+
+/** The original wording of the simplified sentence that starts at `position`, or null. */
+export const originalAt = (sources, position) =>
+  sources?.find((src) => position >= src.start && position < src.end)?.original ?? null;
 
 // ---------------------------------------------------------------------------
 // Question answering
@@ -459,6 +558,7 @@ export const buildDocument = (text, { id, createdAt } = {}) => {
   const cleaned = (text || "").trim();
   const sentenceData = splitSentences(cleaned);
   const sentences = sentenceData.map((s) => s.text);
+  const simplified = simplifyWithSources(cleaned);
 
   const sentenceMeta = sentenceData.map(({ text: sentence, start, end }) => {
     const termFreq = {};
@@ -474,7 +574,8 @@ export const buildDocument = (text, { id, createdAt } = {}) => {
     sentences,
     sentenceMeta,
     summary: summarizeText(cleaned, sentences),
-    simplifiedText: simplifyText(cleaned),
+    simplifiedText: simplified.text,
+    simplifiedSources: simplified.sources,
     highlights: extractKeySpans(cleaned),
     createdAt: createdAt || new Date().toISOString(),
   };

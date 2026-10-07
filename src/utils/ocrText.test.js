@@ -12,6 +12,21 @@ test("keeps list items on their own lines and separates blocks", () => {
   );
 });
 
+test("keeps headings, label lines and address lines on their own lines", () => {
+  expect(cleanOcrText(["INVOICE\nTotal due: $50\nDue date: March 5, 2026"])).toBe(
+    "INVOICE\nTotal due: $50\nDue date: March 5, 2026"
+  );
+  expect(cleanOcrText(["John Smith\n12 Main Street\nBoston, MA 02101"])).toBe(
+    "John Smith\n12 Main Street\nBoston, MA 02101"
+  );
+});
+
+test("still joins wrapped prose that ends on a function word", () => {
+  expect(cleanOcrText(["Please send the form to\nJohn Smith before the end of\nthe month."])).toBe(
+    "Please send the form to John Smith before the end of the month."
+  );
+});
+
 test("collapses repeated spaces and handles empty input", () => {
   expect(cleanOcrText(["Too    many   spaces"])).toBe("Too many spaces");
   expect(cleanOcrText([])).toBe("");
