@@ -38,7 +38,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [viewMode, setViewMode] = useState("simplified");
   const [focusIndex, setFocusIndex] = useState(0);
-  const [settings, updateSettings] = useSettings();
+  const [settings, updateSettings, settingsLoaded] = useSettings();
   const {
     activeDoc,
     history,
@@ -180,7 +180,8 @@ export default function App() {
     scrollToReader();
   };
 
-  if (!fontsLoaded && !fontError) {
+  // Wait for the fonts and the saved settings so nobody sees the defaults flash by.
+  if ((!fontsLoaded && !fontError) || !settingsLoaded) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.page }]}>
         <ActivityIndicator color={theme.accent} />
