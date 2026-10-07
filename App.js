@@ -17,6 +17,7 @@ import { useSpeech } from "./src/hooks/useSpeech";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { appendScan } from "./src/utils/ocrText";
+import { pickTextFile } from "./src/utils/importText";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
 import { exportDocumentSummary } from "./src/utils/storage";
@@ -134,6 +135,17 @@ export default function App() {
     }
   };
 
+  const handleFile = async () => {
+    const file = await pickTextFile();
+    if (file.status === "ok") setInputText((current) => appendScan(current, file.text));
+    else if (file.status === "empty") notify("Nothing to read", "That file has no text in it.");
+    else if (file.status === "tooLarge") {
+      notify("File too large", "Choose a text file smaller than 1 MB, or paste part of it.");
+    } else if (file.status === "error") {
+      notify("Couldn't open the file", "Choose a plain text (.txt) file, or paste the text instead.");
+    }
+  };
+
   const handleShare = async () => {
     const summary = exportDocumentSummary(activeDoc);
     try {
@@ -216,6 +228,7 @@ export default function App() {
                 onChangeText={setInputText}
                 onScan={() => handleImage("camera")}
                 onPickImage={() => handleImage("library")}
+                onPickFile={handleFile}
                 onUseSample={() => setInputText(SAMPLE_TEXT)}
                 onSubmit={handleProcess}
                 scanning={scanning}

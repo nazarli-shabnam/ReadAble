@@ -11,6 +11,7 @@ export const InputCard = ({
   onChangeText,
   onScan,
   onPickImage,
+  onPickFile,
   onUseSample,
   onSubmit,
   scanning,
@@ -23,6 +24,7 @@ export const InputCard = ({
       <View style={styles.row}>
         <Button label="Scan with camera" onPress={onScan} disabled={busy} />
         <Button label="Choose a photo" onPress={onPickImage} disabled={busy} />
+        <Button label="Open a text file" onPress={onPickFile} disabled={busy} />
         <Button label="Try an example" variant="quiet" onPress={onUseSample} disabled={busy} />
       </View>
 
