@@ -68,3 +68,33 @@ test("outside focus mode a saved position turns Listen into Continue", () => {
   fireEvent.press(screen.getByText(/From the start/));
   expect(speech.play).toHaveBeenLastCalledWith(["First sentence here.", "Second sentence here."], 0);
 });
+
+describe("reading ruler", () => {
+  const { rulerGeometry } = require("./ReaderCard");
+
+  test("sits on whole lines and stays inside the text", () => {
+    expect(rulerGeometry(0, 240, 24)).toEqual({ line: 0, top: 0, height: 48, lastLine: 8, lineCount: 10 });
+    expect(rulerGeometry(3, 240, 24)).toMatchObject({ line: 3, top: 72 });
+    expect(rulerGeometry(99, 240, 24)).toMatchObject({ line: 8, top: 192 });
+    expect(rulerGeometry(-4, 240, 24).line).toBe(0);
+    // A one-line text: the ruler covers that line and cannot move.
+    expect(rulerGeometry(1, 24, 24)).toMatchObject({ line: 0, height: 24, lastLine: 0 });
+  });
+
+  test("buttons move the ruler once the text has been measured", () => {
+    renderReader(
+      { status: "idle", source: null },
+      { settings: { ...DEFAULT_SETTINGS, readingRuler: true } }
+    );
+    expect(screen.queryByText("Line down")).toBeNull(); // not measured yet
+
+    // 18px text at 1.5 line spacing = 27px lines; 270px of text = 10 lines.
+    fireEvent(screen.getByTestId("reader-text"), "layout", { nativeEvent: { layout: { height: 270 } } });
+    expect(screen.getByText("Lines 1-2 of 10")).toBeTruthy();
+    fireEvent.press(screen.getByText("Line down"));
+    expect(screen.getByText("Lines 2-3 of 10")).toBeTruthy();
+    fireEvent.press(screen.getByText("Line up"));
+    expect(screen.getByText("Lines 1-2 of 10")).toBeTruthy();
+    expect(screen.getByText("Line up")).toBeDisabled();
+  });
+});

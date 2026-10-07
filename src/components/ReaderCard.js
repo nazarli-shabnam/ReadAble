@@ -1,10 +1,25 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SETTING_LIMITS, clampToStep } from "../constants/settings";
 import { FONT_FACES, useTheme, withOpacity } from "../theme";
 import { HighlightedText } from "./HighlightedText";
 import { ReadingSettings } from "./ReadingSettings";
 import { Button, Card, Segmented, Txt } from "./ui";
+
+const RULER_LINES = 2;
+
+/**
+ * Where the reading ruler sits. All lines have the same height (the reader sets
+ * `lineHeight` explicitly), so no text measurement is needed.
+ * @returns {{line: number, top: number, height: number, lastLine: number, lineCount: number}}
+ */
+export const rulerGeometry = (line, textHeight, lineHeight) => {
+  const lineCount = Math.max(1, Math.round(textHeight / lineHeight));
+  const lastLine = Math.max(0, lineCount - RULER_LINES);
+  const clamped = Math.min(Math.max(0, line), lastLine);
+  const lines = Math.min(RULER_LINES, lineCount);
+  return { line: clamped, top: clamped * lineHeight, height: lines * lineHeight, lastLine, lineCount };
+};
 
 const VIEW_OPTIONS = [
   { value: "simplified", label: "Simplified" },
@@ -122,6 +137,11 @@ export const ReaderCard = ({
 }) => {
   const t = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [rulerLine, setRulerLine] = useState(0);
+  const [textHeight, setTextHeight] = useState(0);
+  useEffect(() => {
+    setRulerLine(0);
+  }, [text]);
   const face = FONT_FACES[settings.fontFamily];
   const sentenceTexts = sentences.map((s) => s.text);
 
@@ -143,6 +163,11 @@ export const ReaderCard = ({
   };
   const listenFrom = (index) => speech.play(sentenceTexts, index);
 
+  const ruler =
+    settings.readingRuler && !settings.focusMode && textHeight > 0
+      ? rulerGeometry(rulerLine, textHeight, textStyle.lineHeight)
+      : null;
+  const dim = withOpacity(t.ink, 0.5);
   const focusSentence = sentences[focusIndex];
   const focusText = focusSentence?.text || "";
 
@@ -205,16 +230,48 @@ export const ReaderCard = ({
                 </View>
               </View>
             ) : (
-              <HighlightedText
-                text={text}
-                sentences={sentences}
-                activeSentenceIndex={readingIndex}
-                onSentencePress={listenFrom}
-                style={textStyle}
-                highlightStyle={highlightStyle}
-              />
+              <View testID="reader-text" onLayout={(e) => setTextHeight(e.nativeEvent.layout.height)}>
+                <HighlightedText
+                  text={text}
+                  sentences={sentences}
+                  activeSentenceIndex={readingIndex}
+                  onSentencePress={listenFrom}
+                  style={textStyle}
+                  highlightStyle={highlightStyle}
+                />
+                {ruler && (
+                  <>
+                    <View
+                      pointerEvents="none"
+                      style={[styles.dim, { top: 0, height: ruler.top, backgroundColor: dim }]}
+                    />
+                    <View
+                      pointerEvents="none"
+                      style={[styles.dim, { top: ruler.top + ruler.height, bottom: 0, backgroundColor: dim }]}
+                    />
+                  </>
+                )}
+              </View>
             )}
           </View>
+          {ruler && (
+            <View style={styles.row}>
+              <Button
+                label="Line up"
+                disabled={ruler.line <= 0}
+                onPress={() => setRulerLine(ruler.line - 1)}
+              />
+              <Button
+                label="Line down"
+                disabled={ruler.line >= ruler.lastLine}
+                onPress={() => setRulerLine(ruler.line + 1)}
+              />
+              <Txt variant="caption" muted accessibilityLiveRegion="polite" style={{ alignSelf: "center" }}>
+                Lines {ruler.line + 1}-{ruler.line + Math.min(RULER_LINES, ruler.lineCount)} of{" "}
+                {ruler.lineCount}
+              </Txt>
+            </View>
+          )}
           <Txt variant="caption" muted>
             Tap a sentence to listen from there. Dates and times are marked in yellow, amounts in
             green.
@@ -239,6 +296,7 @@ export const ReaderCard = ({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   page: { borderRadius: 12, padding: 18 },
+  dim: { position: "absolute", left: 0, right: 0 },
   player: { paddingTop: 14, gap: 12 },
   track: { height: 6, borderRadius: 3, overflow: "hidden", borderWidth: 0 },
   fill: { height: "100%" },
