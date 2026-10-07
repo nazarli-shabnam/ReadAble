@@ -4,8 +4,9 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 
 ## Add text
 - **Try an example**, then **Open in reader**. The page scrolls to the reader.
-- **Choose a photo** with printed text. The text box fills with the recognized text, with wrapped lines joined. In Expo Go you get a message saying scanning needs a development build.
+- **Choose a photo** with printed text. The text box fills with the recognized text, with wrapped lines joined. Scanning again adds the new text below what is already there instead of replacing it (use **Clear** to start over). In Expo Go you get a message saying scanning needs a development build.
 - Choosing a blank photo shows "No text found" and leaves the text box unchanged.
+- **Open a text file** (.txt or .md) adds its text below what is already in the box. A file over 1 MB or an empty one shows a message.
 - **Open in reader** stays disabled while the text box is empty.
 
 ## Reader

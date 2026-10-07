@@ -16,6 +16,8 @@ import { useSpeech } from "./src/hooks/useSpeech";
 import { useReadingPosition } from "./src/hooks/useReadingPosition";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
+import { appendScan } from "./src/utils/ocrText";
+import { pickTextFile } from "./src/utils/importText";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
 import { exportDocumentSummary } from "./src/utils/storage";
@@ -146,7 +148,7 @@ export default function App() {
       setScanning(true);
       const ocr = await runOcrFromImage(result.assets?.[0]);
       if (ocr.status === "ok") {
-        setInputText(ocr.text);
+        setInputText((current) => appendScan(current, ocr.text));
       } else if (ocr.status === "unavailable") {
         notify("Text scanning unavailable", OCR_UNAVAILABLE_MESSAGE);
       } else if (ocr.status === "empty") {
@@ -159,6 +161,17 @@ export default function App() {
       notify("Couldn't open the image", "Please try again.");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleFile = async () => {
+    const file = await pickTextFile();
+    if (file.status === "ok") setInputText((current) => appendScan(current, file.text));
+    else if (file.status === "empty") notify("Nothing to read", "That file has no text in it.");
+    else if (file.status === "tooLarge") {
+      notify("File too large", "Choose a text file smaller than 1 MB, or paste part of it.");
+    } else if (file.status === "error") {
+      notify("Couldn't open the file", "Choose a plain text (.txt) file, or paste the text instead.");
     }
   };
 
@@ -252,6 +265,7 @@ export default function App() {
                 onChangeText={setInputText}
                 onScan={() => handleImage("camera")}
                 onPickImage={() => handleImage("library")}
+                onPickFile={handleFile}
                 onUseSample={() => setInputText(SAMPLE_TEXT)}
                 onSubmit={handleProcess}
                 scanning={scanning}

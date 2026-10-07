@@ -2,6 +2,10 @@ import { keepsLineBreak } from "./textProcessing";
 
 const LIST_ITEM = /^(?:[-*•]|\d+[.)])\s/;
 
+/** Adds scanned text below what is already in the text box (nothing is replaced). */
+export const appendScan = (existing, scanned) =>
+  existing.trim() ? `${existing.trimEnd()}\n\n${scanned}` : scanned;
+
 /**
  * Turns raw OCR block text into readable prose: rejoins words hyphenated at
  * line ends, joins wrapped lines, and separates blocks with a blank line.
