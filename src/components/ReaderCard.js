@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { error } from "../utils/logger";
 import { SETTING_LIMITS, clampToStep } from "../constants/settings";
 import { FONT_FACES, useTheme, withOpacity } from "../theme";
 import { HighlightedText } from "./HighlightedText";
@@ -104,6 +106,19 @@ export const ReaderCard = ({
 }) => {
   const t = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(null);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  const copyText = async () => {
+    try {
+      await Clipboard.setStringAsync(text);
+      setCopied(true);
+      clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      error("Clipboard error", err);
+    }
+  };
   const face = FONT_FACES[settings.fontFamily];
   const sentenceTexts = sentences.map((s) => s.text);
 
@@ -150,12 +165,20 @@ export const ReaderCard = ({
         <Txt muted>Add some text above and choose “Open in reader”. It will appear here.</Txt>
       ) : (
         <>
-          <Segmented
-            options={VIEW_OPTIONS}
-            value={viewMode}
-            onChange={onViewModeChange}
-            accessibilityLabel="Text version"
-          />
+          <View style={styles.row}>
+            <Segmented
+              options={VIEW_OPTIONS}
+              value={viewMode}
+              onChange={onViewModeChange}
+              accessibilityLabel="Text version"
+            />
+            <Button
+              label={copied ? "Copied ✓" : "Copy text"}
+              accessibilityLabel={copied ? "Text copied" : `Copy the ${viewMode} text`}
+              variant="quiet"
+              onPress={copyText}
+            />
+          </View>
 
           <View style={[styles.page, pageStyle]}>
             {settings.focusMode ? (

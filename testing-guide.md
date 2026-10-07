@@ -13,6 +13,8 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 - Switch between **Simplified** and **Original**: the marks stay on the right words in both.
 - **Aa** opens the reading settings. Change the font (Atkinson, Lexend, System), text size, line spacing, letter spacing and background tint, then restart the app. All of them are kept.
 - **High contrast** makes every card black on white with bold outlines.
+- **Reset to defaults** (bottom of the settings) asks first, then restores every reading setting. The Simplified/Original choice is also kept after a restart.
+- **Copy text** copies the version currently shown and says "Copied ✓" for about 2 seconds.
 - **Focus mode** shows one sentence with "Sentence x of y" and Previous and Next buttons.
 
 ## Listen

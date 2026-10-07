@@ -37,9 +37,11 @@ export default function App() {
   const [inputText, setInputText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [viewMode, setViewMode] = useState("simplified");
   const [focusIndex, setFocusIndex] = useState(0);
   const [settings, updateSettings, settingsLoaded] = useSettings();
+  // The Simplified/Original choice is a saved preference like the rest.
+  const viewMode = settings.viewMode;
+  const setViewMode = (mode) => updateSettings({ viewMode: mode });
   const {
     activeDoc,
     history,

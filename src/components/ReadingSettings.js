@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SETTING_LIMITS, OVERLAY_COLORS, clampToStep } from "../constants/settings";
+import { DEFAULT_SETTINGS, SETTING_LIMITS, OVERLAY_COLORS, clampToStep } from "../constants/settings";
 import { FONT_FACES, useTheme } from "../theme";
+import { confirmAsync } from "../utils/dialogs";
 import { Button, Toggle, Txt } from "./ui";
 
 const Stepper = ({ label, value, limits, onChange, format = String }) => {
@@ -196,6 +197,19 @@ export const ReadingSettings = ({ settings, onChange, voices = [], speech }) => 
           />
         </View>
       )}
+
+      <Button
+        label="Reset to defaults"
+        variant="danger"
+        onPress={async () => {
+          const ok = await confirmAsync(
+            "Reset reading settings?",
+            "Font, size, spacing, colors, voice and the other reading settings go back to their defaults.",
+            "Reset"
+          );
+          if (ok) onChange(DEFAULT_SETTINGS);
+        }}
+      />
     </View>
   );
 };

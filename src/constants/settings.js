@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   overlayOpacity: 0.4,
   focusMode: false,
   ttsRate: 1,
+  viewMode: "simplified", // which version of the text the reader shows
   voice: "", // identifier of the chosen speech voice; empty = the device default
 };
 
@@ -37,4 +38,5 @@ export const OVERLAY_COLORS = [
   { value: "#ffe4e6", label: "Rose" },
 ];
 
+export const VIEW_MODE_IDS = ["simplified", "original"];
 export const FONT_FAMILY_IDS = ["atkinson", "lexend", "system"];

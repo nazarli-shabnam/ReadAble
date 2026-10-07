@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { DEFAULT_SETTINGS } from "../constants/settings";
 import { ReadingSettings } from "./ReadingSettings";
 
@@ -35,4 +35,23 @@ test("choosing a voice saves it and plays a sample with it", () => {
 test("no voice picker when the device lists no English voices", () => {
   render(<ReadingSettings settings={DEFAULT_SETTINGS} onChange={() => {}} voices={[]} speech={{ play: jest.fn() }} />);
   expect(screen.queryByText("Voice")).toBeNull();
+});
+
+test("reset restores every default after confirmation", async () => {
+  const dialogs = require("../utils/dialogs");
+  jest.spyOn(dialogs, "confirmAsync").mockResolvedValue(true);
+  const onChange = jest.fn();
+  render(<ReadingSettings settings={{ ...DEFAULT_SETTINGS, fontSize: 30 }} onChange={onChange} />);
+  fireEvent.press(screen.getByText("Reset to defaults"));
+  await waitFor(() => expect(onChange).toHaveBeenCalledWith(DEFAULT_SETTINGS));
+});
+
+test("reset does nothing when cancelled", async () => {
+  const dialogs = require("../utils/dialogs");
+  jest.spyOn(dialogs, "confirmAsync").mockResolvedValue(false);
+  const onChange = jest.fn();
+  render(<ReadingSettings settings={DEFAULT_SETTINGS} onChange={onChange} />);
+  fireEvent.press(screen.getByText("Reset to defaults"));
+  await Promise.resolve();
+  expect(onChange).not.toHaveBeenCalled();
 });

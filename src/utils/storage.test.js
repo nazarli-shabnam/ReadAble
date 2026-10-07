@@ -142,3 +142,8 @@ test("normalizeSettings keeps a voice identifier and drops invalid ones", () => 
   expect(normalizeSettings({ voice: "x".repeat(300) }).voice).toBe("");
   expect(normalizeSettings({}).voice).toBe("");
 });
+
+test("normalizeSettings keeps a valid view mode and drops unknown ones", () => {
+  expect(normalizeSettings({ viewMode: "original" }).viewMode).toBe("original");
+  expect(normalizeSettings({ viewMode: "sideways" }).viewMode).toBe("simplified");
+});
