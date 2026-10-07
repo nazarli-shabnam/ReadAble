@@ -101,13 +101,21 @@ export const ReadingSettings = ({ settings, onChange }) => {
         value={settings.focusMode}
         onValueChange={(v) => onChange({ focusMode: v })}
       />
-      <Toggle
-        label="Colored background"
-        hint="A tint behind the text can make it easier to read"
-        value={settings.overlayEnabled}
-        onValueChange={(v) => onChange({ overlayEnabled: v })}
-      />
-      {settings.overlayEnabled && (
+      {settings.highContrast ? (
+        // High contrast always uses a plain background, so tint controls would do nothing.
+        <Txt variant="caption" muted>
+          Colored background is not used in high contrast. Your choice is kept for when you turn
+          high contrast off.
+        </Txt>
+      ) : (
+        <Toggle
+          label="Colored background"
+          hint="A tint behind the text can make it easier to read"
+          value={settings.overlayEnabled}
+          onValueChange={(v) => onChange({ overlayEnabled: v })}
+        />
+      )}
+      {settings.overlayEnabled && !settings.highContrast && (
         <View style={{ gap: 10 }}>
           <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Background color">
             {OVERLAY_COLORS.map((c) => {
