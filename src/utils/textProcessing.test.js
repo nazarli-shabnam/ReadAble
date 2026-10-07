@@ -191,6 +191,16 @@ describe("summarizeText", () => {
 });
 
 describe("simplifyText", () => {
+  it("only removes connectives used as sentence openers", () => {
+    expect(simplifyText("In addition, bring your ID.")).toBe("Bring your ID.");
+    expect(simplifyText("In addition to the fee, you must bring your ID card.")).toBe(
+      "In addition to the fee, you must bring your ID card."
+    );
+    expect(simplifyText("Thus far, we have received nothing.")).toBe("Thus far, we have received nothing.");
+    expect(simplifyText("Also known as the Fee.")).toBe("Also known as the Fee.");
+    expect(simplifyText("Also, bring a pen.")).toBe("Bring a pen.");
+  });
+
   it("keeps a/an correct after a replacement", () => {
     expect(simplifyText("This requires an additional fee of $5.")).toBe("This needs an extra fee of $5.");
     expect(simplifyText("An additional fee applies.")).toBe("An extra fee applies.");

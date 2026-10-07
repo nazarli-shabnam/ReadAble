@@ -257,7 +257,6 @@ const SIMPLER_WORDS = {
   "at this point in time": "now",
   "a large number of": "many",
   "with regard to": "about",
-  "in addition": "also",
   regarding: "about",
   utilize: "use",
   utilise: "use",
@@ -326,8 +325,10 @@ const matchCase = (source, replacement) => {
   return replacement;
 };
 
+// Only the opening filler word followed by a comma: "In addition to the fee"
+// and "Thus far," are phrases, not connectives, and must stay.
 const LEADING_CONNECTIVE =
-  /^(?:however|therefore|moreover|furthermore|additionally|consequently|nevertheless|thus|hence|also)\b,?\s*/i;
+  /^(?:however|therefore|moreover|furthermore|additionally|consequently|nevertheless|thus|hence|also|in addition),\s*/i;
 const INNER_CONNECTIVE =
   /,\s*(?:however|therefore|moreover|furthermore|consequently|nevertheless)\s*,/gi;
 // Split points inside a long sentence: "; " and ", but/and/so/yet/or ".
