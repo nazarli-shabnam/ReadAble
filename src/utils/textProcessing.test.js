@@ -141,6 +141,24 @@ describe("findKeySpans", () => {
     expect(values("You may bring 3 friends in March. Room 12 is open.")).toEqual([]);
   });
 
+  test("does not mark weights, version numbers or durations", () => {
+    expect(values("The box weighs 10 pounds. Version 1.2.34 shipped. Run 1:30:45 long.")).toEqual([]);
+    expect(values("It costs £5 or 5 GBP, 50 cents.")).toEqual([
+      "amount:£5",
+      "amount:5 GBP",
+      "amount:50 cents",
+    ]);
+  });
+
+  test("accepts only plausible numeric dates and times", () => {
+    expect(values("On 12.03.2025 or 3-12-25 at 23:59.")).toEqual([
+      "date:12.03.2025",
+      "date:3-12-25",
+      "date:23:59",
+    ]);
+    expect(values("Ratio 99/99/99 and 25:61.")).toEqual([]);
+  });
+
   test("recognises common date formats", () => {
     expect(values("12 March 2025, Mar 2025, 2025-03-12, 12/03/2025, 5 pm, 7 p.m.")).toEqual([
       "date:12 March 2025",

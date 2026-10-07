@@ -10,6 +10,8 @@ const generateId = () => {
 const MONTH =
   "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\\.?";
 const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
+// A day or month number in a numeric date: 1-31.
+const DAY_NUM = "(?:0?[1-9]|[12]\\d|3[01])";
 // "p.m" not "p.m." so a sentence-ending period is never swallowed.
 const MERIDIEM = "(?:[ap]\\.m|[ap]m)";
 
@@ -19,14 +21,16 @@ const DATE_SOURCE = [
   `${DAY}\\s+(?:of\\s+)?${MONTH}(?:,?\\s+\\d{4})?`, // 12 March 2025
   `${MONTH},?\\s+\\d{4}`, // March 2025
   "\\d{4}-\\d{2}-\\d{2}", // 2025-03-12
-  "\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4}", // 12/03/2025
-  `\\d{1,2}:\\d{2}(?:\\s?${MERIDIEM})?`, // 6:00 PM
+  `${DAY_NUM}[/-]${DAY_NUM}[/-](?:\\d{4}|\\d{2})`, // 12/03/2025, 3-12-25
+  `${DAY_NUM}\\.${DAY_NUM}\\.\\d{4}`, // 12.03.2025 (a dotted 2-digit year is a version number)
+  `(?:[01]?\\d|2[0-3]):[0-5]\\d(?![:.]\\d)(?:\\s?${MERIDIEM})?`, // 6:00 PM, not 1:30:45
   `\\d{1,2}\\s?${MERIDIEM}`, // 5 PM
 ].join("|");
 
 const NUMBER = "(?:\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\.\\d+)?";
 const CURRENCY_SYMBOL = "[$€£¥₹]";
-const CURRENCY_WORD = "(?:USD|EUR|GBP|dollars?|euros?|pounds?|cents?)";
+// "pounds" is left out on purpose: "10 pounds" is as often a weight as money (use £ or GBP).
+const CURRENCY_WORD = "(?:USD|EUR|GBP|dollars?|euros?|cents?)";
 
 // Money requires a currency marker before or after the number.
 const MONEY_SOURCE = [
