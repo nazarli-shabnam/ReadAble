@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { warn } from "./logger";
+import { uniqueKeySpans } from "./textProcessing";
 import {
   DEFAULT_SETTINGS,
   SETTING_LIMITS,
@@ -106,11 +107,11 @@ export const exportDocumentSummary = (doc) => {
     "Summary",
     doc.summary || "No summary available.",
   ];
-  const { dates = [], amounts = [] } = doc.highlights || {};
-  if (dates.length || amounts.length) {
+  // The same list the Summary card shows: in order of appearance, each value once.
+  const facts = uniqueKeySpans(doc.rawText);
+  if (facts.length) {
     lines.push("", "Key information");
-    dates.forEach((d) => lines.push(`- Date/time: ${d.value}`));
-    amounts.forEach((a) => lines.push(`- Amount: ${a.value}`));
+    facts.forEach((f) => lines.push(`- ${f.type === "date" ? "Date/time" : "Amount"}: ${f.value}`));
   }
   lines.push("", "Simplified text", doc.simplifiedText || doc.rawText);
   return lines.join("\n");

@@ -69,6 +69,12 @@ export const findKeySpans = (text) => {
   return spans;
 };
 
+/** Key details in the order they appear, each distinct value once. */
+export const uniqueKeySpans = (text) => {
+  const seen = new Set();
+  return findKeySpans(text).filter((span) => !seen.has(span.value) && seen.add(span.value));
+};
+
 export const extractKeySpans = (text) => {
   const spans = findKeySpans(text);
   const pick = (type) =>
