@@ -191,6 +191,14 @@ describe("summarizeText", () => {
 });
 
 describe("simplifyText", () => {
+  it("does not split a list at its final \", and\"", () => {
+    const list = "You need to bring a signed form, a valid passport, and the original receipt from the store.";
+    expect(simplifyText(list)).toBe(list);
+    expect(simplifyText("The fee is 1,000 dollars per year, and the deposit is due on arrival.")).toBe(
+      "The fee is 1,000 dollars per year. The deposit is due on arrival."
+    );
+  });
+
   it("only removes connectives used as sentence openers", () => {
     expect(simplifyText("In addition, bring your ID.")).toBe("Bring your ID.");
     expect(simplifyText("In addition to the fee, you must bring your ID card.")).toBe(

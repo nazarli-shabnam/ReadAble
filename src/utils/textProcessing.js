@@ -334,6 +334,8 @@ const INNER_CONNECTIVE =
 // Split points inside a long sentence: "; " and ", but/and/so/yet/or ".
 const CLAUSE_SPLIT = /;\s+|,\s+(?=(?:but|and|so|yet|or)\s)/i;
 const MIN_CLAUSE_WORDS = 5;
+// A comma that is not a thousands separator or decimal comma inside a number.
+const LIST_COMMA = /(?<!\d),|,(?!\d{3})/;
 
 const wordCount = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -355,6 +357,8 @@ const splitClauses = (sentence) => {
   if (wordCount(head) < MIN_CLAUSE_WORDS || wordCount(tail) < MIN_CLAUSE_WORDS) {
     return [sentence];
   }
+  // "a form, a passport, and a receipt" is a list, not two clauses.
+  if (match[0].startsWith(",") && LIST_COMMA.test(head)) return [sentence];
   return [head, ...splitClauses(tail)];
 };
 
