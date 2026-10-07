@@ -14,7 +14,7 @@ Built with Expo SDK 54 (React Native 0.81, React 19). Runs on iOS, Android and t
 - **Listen**: tap any sentence to hear the text from there. The sentence being read is highlighted, focus mode follows along, and you can pause, resume, skip and change the voice speed.
 - **Summary**: the most central sentences, the key dates and amounts, and a reading-time estimate. Share it or copy it.
 - **Ask**: type a question to find the sentence that answers it, then read it aloud or copy it. If nothing in the text matches, it tells you so rather than guessing.
-- **Saved texts**: the last 50 texts are kept on the device. Open, delete or clear them.
+- **Saved texts**: the last 50 texts are kept on the device. Open, rename, pin (up to 10 pinned texts are never dropped), search, delete or clear them.
 
 All reading settings are saved on the device.
 
@@ -74,7 +74,7 @@ src/
   constants/                settings defaults and limits, sample text
 ```
 
-Saved texts store only `{ id, rawText, createdAt }`. Everything else (sentences, summary, simplified text) is derived when a text is opened, so improvements to the text processing apply to texts saved earlier too.
+Saved texts store only `{ id, rawText, createdAt }` plus an optional custom `title` and `pinned` flag the reader set. Everything else (sentences, summary, simplified text) is derived when a text is opened, so improvements to the text processing apply to texts saved earlier too.
 
 ## Limitations
 

@@ -5,6 +5,7 @@ import {
   saveDocument,
   deleteDocument,
   clearAllDocuments,
+  updateDocumentMeta,
 } from "../utils/storage";
 import { warn } from "../utils/logger";
 
@@ -78,6 +79,16 @@ export const useDocumentProcessor = () => {
     [refresh]
   );
 
+  /** Renames and/or pins a saved text; resolves false if the pin limit was reached. */
+  const updateMeta = useCallback(
+    async (docId, meta) => {
+      const ok = await updateDocumentMeta(docId, meta);
+      await refresh();
+      return ok;
+    },
+    [refresh]
+  );
+
   const clearHistory = useCallback(async () => {
     await clearAllDocuments();
     await refresh();
@@ -97,6 +108,7 @@ export const useDocumentProcessor = () => {
     loadDocument,
     removeDocument,
     clearHistory,
+    updateMeta,
     retryLoadHistory: loadHistory,
     runQuestion,
   };

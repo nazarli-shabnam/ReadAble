@@ -18,7 +18,7 @@ import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
-import { exportDocumentSummary } from "./src/utils/storage";
+import { exportDocumentSummary, MAX_PINNED } from "./src/utils/storage";
 import { error } from "./src/utils/logger";
 import { THEMES, ThemeContext } from "./src/theme";
 
@@ -48,6 +48,7 @@ export default function App() {
     loadDocument,
     removeDocument,
     clearHistory,
+    updateMeta,
     retryLoadHistory,
     runQuestion,
   } = useDocumentProcessor();
@@ -160,6 +161,18 @@ export default function App() {
     }
   };
 
+  const handleUpdateMeta = async (docId, meta) => {
+    try {
+      const ok = await updateMeta(docId, meta);
+      if (!ok && meta.pinned) {
+        notify("Too many pinned texts", `You can pin up to ${MAX_PINNED} texts. Unpin one first.`);
+      }
+    } catch (err) {
+      error("Error updating saved text:", err);
+      notify("Couldn't save the change", "Please try again.");
+    }
+  };
+
   const handleClearAll = async () => {
     const ok = await confirmAsync(
       "Delete all saved texts?",
@@ -249,6 +262,7 @@ export default function App() {
                 error={historyError}
                 onOpen={handleOpen}
                 onDelete={handleDelete}
+                onUpdateMeta={handleUpdateMeta}
                 onClearAll={handleClearAll}
                 onRetry={retryLoadHistory}
               />
