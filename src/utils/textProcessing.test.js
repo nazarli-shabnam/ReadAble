@@ -191,6 +191,22 @@ describe("summarizeText", () => {
 });
 
 describe("simplifyText", () => {
+  it("keeps a/an correct after a replacement", () => {
+    expect(simplifyText("This requires an additional fee of $5.")).toBe("This needs an extra fee of $5.");
+    expect(simplifyText("An additional fee applies.")).toBe("An extra fee applies.");
+  });
+
+  it("leaves words that are often nouns alone", () => {
+    expect(simplifyText("Please make an attempt to call us.")).toBe("Please make an attempt to call us.");
+    expect(simplifyText("Proof of purchase is needed.")).toBe("Proof of purchase is needed.");
+  });
+
+  it("replaces verb inflections consistently", () => {
+    expect(simplifyText("We are utilizing the form.")).toBe("We are using the form.");
+    expect(simplifyText("He obtained a permit.")).toBe("He got a permit.");
+    expect(simplifyText("The plan initiates later.")).toBe("The plan starts later.");
+  });
+
   test("never produces double periods and keeps dates and numbers intact", () => {
     const result = simplifyText(SAMPLE_TEXT);
     expect(result).not.toMatch(/\.\./);
