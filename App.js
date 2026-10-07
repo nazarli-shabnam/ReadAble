@@ -16,6 +16,7 @@ import { useSettings } from "./src/hooks/useSettings";
 import { useSpeech } from "./src/hooks/useSpeech";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
+import { appendScan } from "./src/utils/ocrText";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
 import { exportDocumentSummary } from "./src/utils/storage";
@@ -117,7 +118,7 @@ export default function App() {
       setScanning(true);
       const ocr = await runOcrFromImage(result.assets?.[0]);
       if (ocr.status === "ok") {
-        setInputText(ocr.text);
+        setInputText((current) => appendScan(current, ocr.text));
       } else if (ocr.status === "unavailable") {
         notify("Text scanning unavailable", OCR_UNAVAILABLE_MESSAGE);
       } else if (ocr.status === "empty") {
