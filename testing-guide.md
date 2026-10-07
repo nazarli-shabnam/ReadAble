@@ -9,7 +9,7 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 - **Open in reader** stays disabled while the text box is empty.
 
 ## Reader
-- In the example text, `March 12, 2025`, `6:00 PM`, `5:00 PM` and `March 10, 2025` are yellow and `12$` is green. Nothing else is marked.
+- In the example text, `March 12, 2025`, `6:00 PM`, `5:00 PM` and `March 10, 2025` are yellow and underlined and `12$` is green. Nothing else is marked.
 - Switch between **Simplified** and **Original**: the marks stay on the right words in both.
 - **Aa** opens the reading settings. Change the font (Atkinson, Lexend, System), text size, line spacing, letter spacing and background tint, then restart the app. All of them are kept.
 - **High contrast** makes every card black on white with bold outlines.

@@ -53,7 +53,8 @@ export const HighlightedText = ({
   if (!text) return null;
   const colors = {
     active: { backgroundColor: t.reading },
-    date: { backgroundColor: t.date, color: t.onDate },
+    // Dates are also underlined, so dates and amounts differ by more than colour.
+    date: { backgroundColor: t.date, color: t.onDate, textDecorationLine: "underline" },
     amount: { backgroundColor: t.amount, color: t.onAmount },
   };
 

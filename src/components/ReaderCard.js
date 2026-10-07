@@ -197,7 +197,7 @@ export const ReaderCard = ({
             )}
           </View>
           <Txt variant="caption" muted>
-            Tap a sentence to listen from there. Dates and times are marked in yellow, amounts in
+            Tap a sentence to listen from there. Dates and times are marked in yellow and underlined, amounts in
             green.
           </Txt>
 
