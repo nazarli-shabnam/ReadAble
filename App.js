@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, Share, StyleSheet, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import * as Clipboard from "expo-clipboard";
 import * as ImagePicker from "expo-image-picker";
 import { useFonts } from "expo-font";
 import { InputCard } from "./src/components/InputCard";
@@ -19,6 +18,7 @@ import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
 import { splitSentences } from "./src/utils/textProcessing";
 import { exportDocumentSummary } from "./src/utils/storage";
+import { shareOrCopy } from "./src/utils/share";
 import { error } from "./src/utils/logger";
 import { THEMES, ThemeContext } from "./src/theme";
 
@@ -134,18 +134,14 @@ export default function App() {
   };
 
   const handleShare = async () => {
-    const summary = exportDocumentSummary(activeDoc);
     try {
-      await Share.share({ message: summary });
-    } catch {
-      // Web without navigator.share: fall back to the clipboard.
-      try {
-        await Clipboard.setStringAsync(summary);
+      const result = await shareOrCopy(exportDocumentSummary(activeDoc));
+      if (result === "copied") {
         notify("Summary copied", "Sharing isn't available here, so the summary is on your clipboard.");
-      } catch (err) {
-        error("Error sharing summary:", err);
-        notify("Couldn't share", "Please try again.");
       }
+    } catch (err) {
+      error("Error sharing summary:", err);
+      notify("Couldn't share", "Please try again.");
     }
   };
 
