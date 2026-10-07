@@ -5,6 +5,8 @@ import {
   extractKeySpans,
   summarizeText,
   simplifyText,
+  simplifyWithSources,
+  originalAt,
   answerQuestion,
   buildDocument,
 } from "./textProcessing";
@@ -311,6 +313,33 @@ describe("simplifyText", () => {
   });
 });
 
+describe("simplifyWithSources", () => {
+  const raw = "However, you must utilize the side door; it is the only entrance for visitors today.\n\nThe fee is $20.";
+  const { text, sources } = simplifyWithSources(raw);
+
+  test("returns the same text as simplifyText", () => {
+    expect(text).toBe(simplifyText(raw));
+  });
+
+  test("maps every simplified sentence back to its original wording", () => {
+    splitSentences(text).forEach((sentence) => {
+      const original = originalAt(sources, sentence.start);
+      expect(original).not.toBeNull();
+    });
+    // Both halves of a split sentence share one original.
+    const first = splitSentences(text)[0];
+    const second = splitSentences(text)[1];
+    expect(originalAt(sources, first.start)).toBe(originalAt(sources, second.start));
+    expect(originalAt(sources, first.start)).toMatch(/^However, you must utilize/);
+    expect(originalAt(sources, text.indexOf("The fee"))).toBe("The fee is $20.");
+  });
+
+  test("ranges point at the simplified text", () => {
+    sources.forEach((src) => expect(text.slice(src.start, src.end).length).toBeGreaterThan(0));
+    expect(originalAt(sources, text.length + 5)).toBeNull();
+  });
+});
+
 describe("answerQuestion", () => {
   const doc = buildDocument(SAMPLE_TEXT);
 
@@ -357,6 +386,7 @@ describe("buildDocument", () => {
         rawText: expect.any(String),
         summary: expect.any(String),
         simplifiedText: expect.any(String),
+        simplifiedSources: expect.any(Array),
         highlights: { dates: [], amounts: [] },
         createdAt: expect.any(String),
       })

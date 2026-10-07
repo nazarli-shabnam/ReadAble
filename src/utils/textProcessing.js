@@ -416,35 +416,61 @@ const simplifySentence = (sentence) =>
  * long sentences split into shorter ones. Paragraphs (separated by blank
  * lines), list items and heading/label lines are kept on their own lines;
  * hard-wrapped lines are joined.
+ *
+ * @returns {{text: string, sources: Array<{start: number, end: number, original: string}>}}
+ *   the simplified text, and for each original sentence the range of `text`
+ *   it became and its original wording
  */
-export const simplifyText = (text) => {
-  if (!text) return "";
-  return text
-    .split(/\n[ \t]*\n\s*/)
-    .map((paragraph) => {
-      const joined = joinWrappedLines(paragraph.trim());
-      const sentences = splitSentences(joined);
-      const lineBreakBetween = (i) =>
-        i >= 0 && i < sentences.length - 1 &&
-        joined.slice(sentences[i].end, sentences[i + 1].start).includes("\n");
+export const simplifyWithSources = (text) => {
+  if (!text) return { text: "", sources: [] };
+  const paragraphs = text.split(/\n[ \t]*\n\s*/).map((paragraph) => {
+    const joined = joinWrappedLines(paragraph.trim());
+    const sentences = splitSentences(joined);
+    const lineBreakBetween = (i) =>
+      i >= 0 && i < sentences.length - 1 &&
+      joined.slice(sentences[i].end, sentences[i + 1].start).includes("\n");
 
-      return sentences
-        .flatMap((s, i) => {
-          const pieces = splitClauses(simplifySentence(s.text)).map(finishSentence).filter(Boolean);
-          // A heading or "Label: value" line is not a sentence: don't invent a period.
-          const nextIsList = i + 1 < sentences.length && LIST_ITEM.test(sentences[i + 1].text);
-          const standalone =
-            !LIST_ITEM.test(s.text) &&
-            !SENTENCE_END.test(s.text) &&
-            (lineBreakBetween(i - 1) || (lineBreakBetween(i) && !nextIsList));
-          if (standalone && pieces.length === 1) pieces[0] = pieces[0].replace(/\.$/, "");
-          return pieces.map((piece, j) => ({ piece, br: j === 0 && lineBreakBetween(i - 1) }));
-        })
-        .reduce((out, { piece, br }) => (out ? `${out}${br ? "\n" : " "}${piece}` : piece), "");
-    })
-    .filter(Boolean)
-    .join("\n\n");
+    let out = "";
+    const sources = [];
+    sentences.forEach((s, i) => {
+      const pieces = splitClauses(simplifySentence(s.text)).map(finishSentence).filter(Boolean);
+      // A heading or "Label: value" line is not a sentence: don't invent a period.
+      const nextIsList = i + 1 < sentences.length && LIST_ITEM.test(sentences[i + 1].text);
+      const standalone =
+        !LIST_ITEM.test(s.text) &&
+        !SENTENCE_END.test(s.text) &&
+        (lineBreakBetween(i - 1) || (lineBreakBetween(i) && !nextIsList));
+      if (standalone && pieces.length === 1) pieces[0] = pieces[0].replace(/\.$/, "");
+
+      let start = null;
+      pieces.forEach((piece, j) => {
+        const sep = out ? (j === 0 && lineBreakBetween(i - 1) ? "\n" : " ") : "";
+        if (start === null) start = out.length + sep.length;
+        out += sep + piece;
+      });
+      if (start !== null) sources.push({ start, end: out.length, original: s.text });
+    });
+    return { text: out, sources };
+  });
+
+  let result = "";
+  const sources = [];
+  paragraphs.forEach((paragraph) => {
+    if (!paragraph.text) return;
+    if (result) result += "\n\n";
+    paragraph.sources.forEach((src) =>
+      sources.push({ ...src, start: src.start + result.length, end: src.end + result.length })
+    );
+    result += paragraph.text;
+  });
+  return { text: result, sources };
 };
+
+export const simplifyText = (text) => simplifyWithSources(text).text;
+
+/** The original wording of the simplified sentence that starts at `position`, or null. */
+export const originalAt = (sources, position) =>
+  sources?.find((src) => position >= src.start && position < src.end)?.original ?? null;
 
 // ---------------------------------------------------------------------------
 // Question answering
@@ -532,6 +558,7 @@ export const buildDocument = (text, { id, createdAt } = {}) => {
   const cleaned = (text || "").trim();
   const sentenceData = splitSentences(cleaned);
   const sentences = sentenceData.map((s) => s.text);
+  const simplified = simplifyWithSources(cleaned);
 
   const sentenceMeta = sentenceData.map(({ text: sentence, start, end }) => {
     const termFreq = {};
@@ -547,7 +574,8 @@ export const buildDocument = (text, { id, createdAt } = {}) => {
     sentences,
     sentenceMeta,
     summary: summarizeText(cleaned, sentences),
-    simplifiedText: simplifyText(cleaned),
+    simplifiedText: simplified.text,
+    simplifiedSources: simplified.sources,
     highlights: extractKeySpans(cleaned),
     createdAt: createdAt || new Date().toISOString(),
   };

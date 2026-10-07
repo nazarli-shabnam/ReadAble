@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { SETTING_LIMITS, clampToStep } from "../constants/settings";
+import { originalAt } from "../utils/textProcessing";
 import { FONT_FACES, useTheme, withOpacity } from "../theme";
 import { HighlightedText } from "./HighlightedText";
 import { ReadingSettings } from "./ReadingSettings";
@@ -104,6 +105,11 @@ export const ReaderCard = ({
 }) => {
   const t = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Simplified sentence (index into `sentences`) whose original wording is shown.
+  const [originalIndex, setOriginalIndex] = useState(null);
+  useEffect(() => {
+    setOriginalIndex(null);
+  }, [text]);
   const face = FONT_FACES[settings.fontFamily];
   const sentenceTexts = sentences.map((s) => s.text);
 
@@ -127,6 +133,11 @@ export const ReaderCard = ({
 
   // The sentence being read aloud wins over a sentence marked from a Q&A answer.
   const activeIndex = readingIndex ?? markedIndex;
+  const canShowOriginal = viewMode === "simplified";
+  const originalWording =
+    canShowOriginal && originalIndex !== null && sentences[originalIndex]
+      ? originalAt(doc.simplifiedSources, sentences[originalIndex].start)
+      : null;
   const focusSentence = sentences[focusIndex];
   const focusText = focusSentence?.text || "";
 
@@ -165,6 +176,7 @@ export const ReaderCard = ({
                   sentences={[{ start: 0, end: focusText.length }]}
                   activeSentenceIndex={activeIndex === focusIndex ? 0 : null}
                   onSentencePress={() => listenFrom(focusIndex)}
+                  onSentenceLongPress={canShowOriginal ? () => setOriginalIndex(focusIndex) : undefined}
                   style={textStyle}
                   highlightStyle={highlightStyle}
                 />
@@ -187,6 +199,9 @@ export const ReaderCard = ({
                     style={{ flex: 1 }}
                   />
                 </View>
+                {canShowOriginal && (
+                  <Button label="Show original wording" onPress={() => setOriginalIndex(focusIndex)} />
+                )}
               </View>
             ) : (
               <HighlightedText
@@ -194,14 +209,26 @@ export const ReaderCard = ({
                 sentences={sentences}
                 activeSentenceIndex={activeIndex}
                 onSentencePress={listenFrom}
+                onSentenceLongPress={canShowOriginal ? setOriginalIndex : undefined}
                 style={textStyle}
                 highlightStyle={highlightStyle}
               />
             )}
           </View>
+          {originalWording !== null && (
+            <View
+              accessibilityLiveRegion="polite"
+              style={[styles.original, { backgroundColor: t.field, borderColor: t.border, borderWidth: t.borderWidth }]}
+            >
+              <Txt variant="label">Original wording</Txt>
+              <Txt>{originalWording}</Txt>
+              <Button label="Close" variant="quiet" onPress={() => setOriginalIndex(null)} />
+            </View>
+          )}
           <Txt variant="caption" muted>
-            Tap a sentence to listen from there. Dates and times are marked in yellow, amounts in
-            green.
+            Tap a sentence to listen from there
+            {canShowOriginal ? ", or hold it to see the original wording" : ""}. Dates and times are
+            marked in yellow, amounts in green.
           </Txt>
 
           <PlayerBar
@@ -221,6 +248,7 @@ export const ReaderCard = ({
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   page: { borderRadius: 12, padding: 18 },
+  original: { borderRadius: 12, padding: 14, gap: 8 },
   player: { paddingTop: 14, gap: 12 },
   track: { height: 6, borderRadius: 3, overflow: "hidden", borderWidth: 0 },
   fill: { height: "100%" },
