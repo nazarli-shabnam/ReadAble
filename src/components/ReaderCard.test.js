@@ -36,11 +36,26 @@ test("the player ignores an answer being read aloud", () => {
 
   fireEvent.press(screen.getByText("Listen"));
   expect(speech.pause).not.toHaveBeenCalled();
-  expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."]);
+  expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."], 0);
 });
 
 test("the player still controls document playback", () => {
   const speech = renderReader({ status: "speaking", source: "document", index: 0, total: 2 });
   fireEvent.press(screen.getByText("Pause"));
   expect(speech.pause).toHaveBeenCalled();
+});
+
+test("in focus mode Listen starts from the sentence on screen", () => {
+  const speech = renderReader(
+    { status: "idle", source: null },
+    { settings: { ...DEFAULT_SETTINGS, focusMode: true }, focusIndex: 1 }
+  );
+  fireEvent.press(screen.getByText("Listen"));
+  expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."], 1);
+});
+
+test("outside focus mode Listen starts from the top", () => {
+  const speech = renderReader({ status: "idle", source: null }, { focusIndex: 1 });
+  fireEvent.press(screen.getByText("Listen"));
+  expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."], 0);
 });

@@ -11,7 +11,7 @@ const VIEW_OPTIONS = [
   { value: "original", label: "Original" },
 ];
 
-const PlayerBar = ({ speech, readingIndex, sentenceTexts, rate, onRateChange, disabled }) => {
+const PlayerBar = ({ speech, readingIndex, sentenceTexts, startIndex, rate, onRateChange, disabled }) => {
   const t = useTheme();
   // The same speech engine also reads Q&A answers; this bar only controls the document.
   const status = speech.source === "document" ? speech.status : "idle";
@@ -20,7 +20,7 @@ const PlayerBar = ({ speech, readingIndex, sentenceTexts, rate, onRateChange, di
   const onPlay = () => {
     if (status === "speaking") speech.pause();
     else if (status === "paused") speech.resume();
-    else speech.play(sentenceTexts);
+    else speech.play(sentenceTexts, startIndex);
   };
   const progress = readingIndex !== null ? (readingIndex + 1) / speech.total : 0;
   const rateLimits = SETTING_LIMITS.ttsRate;
@@ -206,6 +206,7 @@ export const ReaderCard = ({
             speech={speech}
             readingIndex={readingIndex}
             sentenceTexts={sentenceTexts}
+            startIndex={settings.focusMode ? focusIndex : 0}
             rate={settings.ttsRate}
             onRateChange={(ttsRate) => onSettingsChange({ ttsRate })}
             disabled={!sentences.length}
