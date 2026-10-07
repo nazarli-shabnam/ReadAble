@@ -8,6 +8,9 @@ import {
   loadSettings,
   saveSettings,
   exportDocumentSummary,
+  updateDocumentMeta,
+  MAX_DOCUMENTS,
+  MAX_PINNED,
 } from "./storage";
 import { DEFAULT_SETTINGS } from "../constants/settings";
 import { buildDocument } from "./textProcessing";
@@ -144,4 +147,45 @@ test("exportDocumentSummary lists key information", () => {
   expect(text).toContain("- Date/time: March 3, 2025");
   expect(text).toContain("- Amount: $5");
   expect(text).toContain("Simplified text");
+});
+
+describe("titles and pins", () => {
+  const save = (id, text) => saveDocument(buildDocument(text, { id }));
+
+  test("a custom title and a pin are stored and survive loading", async () => {
+    await save("a", "First text here.");
+    expect(await updateDocumentMeta("a", { title: "  Tax letter  ", pinned: true })).toBe(true);
+    expect((await loadDocuments())[0]).toMatchObject({ id: "a", title: "Tax letter", pinned: true });
+
+    await updateDocumentMeta("a", { title: "", pinned: false });
+    expect(Object.keys((await loadDocuments())[0]).sort()).toEqual(["createdAt", "id", "rawText"]);
+  });
+
+  test("saving the same text again keeps its title and pin", async () => {
+    await save("a", "Same text.");
+    await updateDocumentMeta("a", { title: "Mine", pinned: true });
+    await save("b", "Same text.");
+    const records = await loadDocuments();
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ id: "b", title: "Mine", pinned: true });
+  });
+
+  test("pinned texts are never pushed out by the cap", async () => {
+    await save("keep", "Keep this one.");
+    await updateDocumentMeta("keep", { pinned: true });
+    for (let i = 0; i < MAX_DOCUMENTS + 3; i++) await save(`n${i}`, `Text number ${i}.`);
+    const records = await loadDocuments();
+    expect(records).toHaveLength(MAX_DOCUMENTS);
+    expect(records.some((r) => r.id === "keep")).toBe(true);
+    expect(records[0].id).toBe(`n${MAX_DOCUMENTS + 2}`);
+  });
+
+  test("refuses to pin more than the limit", async () => {
+    for (let i = 0; i <= MAX_PINNED; i++) await save(`p${i}`, `Pinned candidate ${i}.`);
+    for (let i = 0; i < MAX_PINNED; i++) {
+      expect(await updateDocumentMeta(`p${i}`, { pinned: true })).toBe(true);
+    }
+    expect(await updateDocumentMeta(`p${MAX_PINNED}`, { pinned: true })).toBe(false);
+    expect(await updateDocumentMeta("missing", { pinned: true })).toBe(false);
+  });
 });

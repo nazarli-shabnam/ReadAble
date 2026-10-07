@@ -23,12 +23,15 @@ const LEGACY_KEYS = {
   HISTORY: "@readable:history",
 };
 
-const MAX_DOCUMENTS = 50;
+export const MAX_DOCUMENTS = 50;
+export const MAX_PINNED = 10;
+const MAX_TITLE_LENGTH = 120;
 
 // ---------------------------------------------------------------------------
 // Documents
 //
-// Only { id, rawText, createdAt } is stored; everything else is derived by
+// Only { id, rawText, createdAt } plus the reader's own choices (an optional
+// custom `title`, and `pinned`) are stored; everything else is derived by
 // buildDocument when a document is opened. Records written by older versions
 // (which also stored derived fields) load the same way.
 // ---------------------------------------------------------------------------
@@ -39,7 +42,19 @@ const toRecord = (doc) => {
   if (typeof id !== "string" || !id) return null;
   if (typeof rawText !== "string" || !rawText.trim()) return null;
   if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) return null;
-  return { id, rawText, createdAt };
+  const record = { id, rawText, createdAt };
+  const title = typeof doc.title === "string" ? doc.title.trim().slice(0, MAX_TITLE_LENGTH) : "";
+  if (title) record.title = title;
+  if (doc.pinned === true) record.pinned = true;
+  return record;
+};
+
+// Newest first; pinned texts always stay, the newest others fill the rest.
+const capRecords = (records) => {
+  const pinned = records.filter((r) => r.pinned);
+  const others = records.filter((r) => !r.pinned);
+  const keep = new Set([...pinned, ...others.slice(0, Math.max(0, MAX_DOCUMENTS - pinned.length))]);
+  return records.filter((r) => keep.has(r));
 };
 
 const writeRecords = (records) =>
@@ -86,10 +101,33 @@ export const saveDocument = async (doc) => {
   const record = toRecord(doc);
   if (!record) throw new Error("Cannot save an invalid document.");
   const existing = await loadDocuments();
-  const others = existing.filter(
-    (r) => r.id !== record.id && r.rawText.trim() !== record.rawText.trim()
-  );
-  await writeRecords([record, ...others].slice(0, MAX_DOCUMENTS));
+  const isSame = (r) => r.id === record.id || r.rawText.trim() === record.rawText.trim();
+  // Saving text that is already saved keeps the title and pin the reader gave it.
+  const previous = existing.find(isSame);
+  const merged = { ...record, ...(previous?.title && !record.title ? { title: previous.title } : {}) };
+  if (previous?.pinned) merged.pinned = true;
+  await writeRecords(capRecords([merged, ...existing.filter((r) => !isSame(r))]));
+};
+
+/**
+ * Renames and/or pins a saved text. `title` "" goes back to the automatic title.
+ * Pinning is refused (returns false) beyond MAX_PINNED.
+ */
+export const updateDocumentMeta = async (docId, { title, pinned }) => {
+  const existing = await loadDocuments();
+  const target = existing.find((r) => r.id === docId);
+  if (!target) return false;
+  if (pinned === true && !target.pinned && existing.filter((r) => r.pinned).length >= MAX_PINNED) {
+    return false;
+  }
+  const { title: _title, pinned: _pinned, ...base } = target;
+  const next = toRecord({
+    ...base,
+    title: title === undefined ? target.title : title,
+    pinned: pinned === undefined ? target.pinned : pinned,
+  });
+  await writeRecords(existing.map((r) => (r.id === docId ? next : r)));
+  return true;
 };
 
 export const deleteDocument = async (docId) => {
