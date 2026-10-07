@@ -59,3 +59,12 @@ test("outside focus mode Listen starts from the top", () => {
   fireEvent.press(screen.getByText("Listen"));
   expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."], 0);
 });
+
+test("outside focus mode a saved position turns Listen into Continue", () => {
+  const speech = renderReader({ status: "idle", source: null }, { resumeIndex: 1 });
+  fireEvent.press(screen.getByText("Continue"));
+  expect(speech.play).toHaveBeenCalledWith(["First sentence here.", "Second sentence here."], 1);
+
+  fireEvent.press(screen.getByText(/From the start/));
+  expect(speech.play).toHaveBeenLastCalledWith(["First sentence here.", "Second sentence here."], 0);
+});

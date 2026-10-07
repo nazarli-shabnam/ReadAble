@@ -11,12 +11,22 @@ const VIEW_OPTIONS = [
   { value: "original", label: "Original" },
 ];
 
-const PlayerBar = ({ speech, readingIndex, sentenceTexts, startIndex, rate, onRateChange, disabled }) => {
+const PlayerBar = ({
+  speech,
+  readingIndex,
+  sentenceTexts,
+  startIndex,
+  continuing,
+  rate,
+  onRateChange,
+  disabled,
+}) => {
   const t = useTheme();
   // The same speech engine also reads Q&A answers; this bar only controls the document.
   const status = speech.source === "document" ? speech.status : "idle";
   const active = status !== "idle";
-  const playLabel = status === "speaking" ? "Pause" : status === "paused" ? "Resume" : "Listen";
+  const playLabel =
+    status === "speaking" ? "Pause" : status === "paused" ? "Resume" : continuing ? "Continue" : "Listen";
   const onPlay = () => {
     if (status === "speaking") speech.pause();
     else if (status === "paused") speech.resume();
@@ -60,6 +70,13 @@ const PlayerBar = ({ speech, readingIndex, sentenceTexts, startIndex, rate, onRa
         />
         <Button label="Stop" onPress={speech.stop} disabled={!active} />
       </View>
+      {continuing && !active && (
+        <Button
+          label={`From the start (continuing from sentence ${startIndex + 1})`}
+          variant="quiet"
+          onPress={() => speech.play(sentenceTexts, 0)}
+        />
+      )}
       <View style={[styles.row, { alignItems: "center" }]}>
         <Txt variant="label" style={{ flex: 1 }}>
           Voice speed
@@ -98,6 +115,7 @@ export const ReaderCard = ({
   onSettingsChange,
   speech,
   readingIndex,
+  resumeIndex = 0,
   focusIndex,
   onFocusIndexChange,
   onLayout,
@@ -206,7 +224,8 @@ export const ReaderCard = ({
             speech={speech}
             readingIndex={readingIndex}
             sentenceTexts={sentenceTexts}
-            startIndex={settings.focusMode ? focusIndex : 0}
+            startIndex={settings.focusMode ? focusIndex : resumeIndex}
+            continuing={!settings.focusMode && resumeIndex > 0}
             rate={settings.ttsRate}
             onRateChange={(ttsRate) => onSettingsChange({ ttsRate })}
             disabled={!sentences.length}

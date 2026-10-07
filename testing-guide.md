@@ -17,6 +17,7 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 
 ## Listen
 - Tap the second sentence. Speech starts there and that sentence is highlighted.
+- Listen to a few sentences, press **Stop**, then close and reopen the app: the button now says **Continue** and starts from where you stopped; **From the start** restarts. Reading to the end resets it.
 - **Pause**, then **Resume**: the same sentence starts again from its beginning.
 - ⏮ and ⏭ move one sentence. **Stop** clears the highlight.
 - Change the voice speed while listening. The next sentence uses the new speed.
