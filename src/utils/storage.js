@@ -12,6 +12,7 @@ export const STORAGE_KEYS = {
   DOCUMENTS: "@readable:documents",
   CORRUPT_DOCUMENTS: "@readable:documents.corrupt",
   SETTINGS: "@readable:settings",
+  POSITIONS: "@readable:positions",
 };
 
 // Keys written by earlier versions.
@@ -96,6 +97,46 @@ export const deleteDocument = async (docId) => {
 };
 
 export const clearAllDocuments = () => AsyncStorage.removeItem(STORAGE_KEYS.DOCUMENTS);
+
+// ---------------------------------------------------------------------------
+// Reading positions
+//
+// Kept apart from the saved texts: { [docId]: ratio } where ratio (0-1) is how
+// far through the text the reader got. A ratio instead of a sentence number
+// stays valid when the Simplified and Original versions split differently.
+// ---------------------------------------------------------------------------
+
+const loadPositions = async () => {
+  try {
+    const parsed = JSON.parse((await AsyncStorage.getItem(STORAGE_KEYS.POSITIONS)) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+/** How far through a saved text the reader got, 0-1 (0 if unknown). */
+export const loadPosition = async (docId) => {
+  const ratio = (await loadPositions())[docId];
+  return typeof ratio === "number" && ratio > 0 && ratio <= 1 ? ratio : 0;
+};
+
+/** Remembers the position; 0 forgets it. Positions of texts that are gone are dropped. */
+export const savePosition = async (docId, ratio) => {
+  try {
+    const known = new Set((await loadDocuments()).map((r) => r.id));
+    const positions = await loadPositions();
+    const next = {};
+    Object.keys(positions).forEach((id) => {
+      if (known.has(id) && id !== docId) next[id] = positions[id];
+    });
+    const clamped = Math.min(1, Math.max(0, Number(ratio) || 0));
+    if (clamped > 0 && known.has(docId)) next[docId] = Math.round(clamped * 1000) / 1000;
+    await AsyncStorage.setItem(STORAGE_KEYS.POSITIONS, JSON.stringify(next));
+  } catch (err) {
+    warn("Failed to save the reading position:", err);
+  }
+};
 
 export const exportDocumentSummary = (doc) => {
   if (!doc) return "";

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   overlayColor: "#fef3c7",
   overlayOpacity: 0.4,
   focusMode: false,
+  readingRuler: false, // dim all but a couple of lines, movable line by line
   ttsRate: 1,
 };
 

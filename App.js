@@ -14,6 +14,7 @@ import { Txt } from "./src/components/ui";
 import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
 import { useSettings } from "./src/hooks/useSettings";
 import { useSpeech } from "./src/hooks/useSpeech";
+import { useReadingPosition } from "./src/hooks/useReadingPosition";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { notify, confirmAsync } from "./src/utils/dialogs";
@@ -71,15 +72,37 @@ export default function App() {
   const sentences = useMemo(() => splitSentences(viewText), [viewText]);
   const readingIndex = speech.source === "document" ? speech.index : null;
 
-  // What is spoken must match what is shown: stop and restart focus when the text changes.
+  // Where the reader got to in this text (saved per text, mapped onto the version shown).
+  const { resumeIndex, loadedFor, remember } = useReadingPosition(activeDoc?.id, sentences.length);
+  const resumeRef = useRef(0);
+  resumeRef.current = resumeIndex;
+  const lastReadRef = useRef(null);
+
+  // What is spoken must match what is shown: stop, and put focus mode back where the reader was.
   const { stop: stopSpeech } = speech;
   useEffect(() => {
     stopSpeech();
     const pending = pendingFocus.current;
     pendingFocus.current = null;
-    setFocusIndex(pending ?? 0);
+    setFocusIndex(pending ?? (loadedFor === activeDoc?.id ? resumeRef.current : 0));
     if (pending === null) setMarkedIndex(null);
   }, [viewText, stopSpeech]);
+
+  // The saved position arrives after the text opens.
+  useEffect(() => {
+    if (loadedFor && loadedFor === activeDoc?.id) setFocusIndex(resumeRef.current);
+  }, [loadedFor]);
+
+  // Remember the sentence being read; reading to the end starts the text over.
+  useEffect(() => {
+    if (readingIndex !== null) {
+      lastReadRef.current = readingIndex;
+      remember(readingIndex);
+    } else {
+      if (lastReadRef.current !== null && lastReadRef.current === sentences.length - 1) remember(0);
+      lastReadRef.current = null;
+    }
+  }, [readingIndex]);
 
   // Focus mode follows the sentence being read aloud.
   useEffect(() => {
@@ -251,7 +274,11 @@ export default function App() {
                 readingIndex={readingIndex}
                 markedIndex={markedIndex}
                 focusIndex={Math.min(focusIndex, Math.max(0, sentences.length - 1))}
-                onFocusIndexChange={setFocusIndex}
+                resumeIndex={resumeIndex}
+                onFocusIndexChange={(index) => {
+                  setFocusIndex(index);
+                  if (settings.focusMode) remember(index);
+                }}
                 onLayout={(e) => {
                   readerY.current = e.nativeEvent.layout.y;
                 }}

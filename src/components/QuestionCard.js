@@ -40,7 +40,7 @@ export const QuestionCard = ({ docId, ask, speech, onShow }) => {
     }
   };
 
-  const readingAnswer = speech.source === "answer" && speech.status === "speaking";
+  const readingAnswer = speech.source === "answer" && speech.status !== "idle";
 
   return (
     <Card title="Ask about the text">

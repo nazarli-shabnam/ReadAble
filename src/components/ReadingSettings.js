@@ -102,6 +102,12 @@ export const ReadingSettings = ({ settings, onChange }) => {
         onValueChange={(v) => onChange({ focusMode: v })}
       />
       <Toggle
+        label="Reading ruler"
+        hint="Dims everything but two lines; move it with the buttons under the text"
+        value={settings.readingRuler}
+        onValueChange={(v) => onChange({ readingRuler: v })}
+      />
+      <Toggle
         label="Colored background"
         hint="A tint behind the text can make it easier to read"
         value={settings.overlayEnabled}

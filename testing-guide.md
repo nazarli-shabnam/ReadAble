@@ -14,9 +14,11 @@ Run `corepack yarn test` first. Then go through this on at least one phone (Expo
 - **Aa** opens the reading settings. Change the font (Atkinson, Lexend, System), text size, line spacing, letter spacing and background tint, then restart the app. All of them are kept.
 - **High contrast** makes every card black on white with bold outlines.
 - **Focus mode** shows one sentence with "Sentence x of y" and Previous and Next buttons.
+- **Reading ruler** dims everything except two lines; **Line up** / **Line down** move it and the caption shows which lines are lit. It is not used in focus mode.
 
 ## Listen
 - Tap the second sentence. Speech starts there and that sentence is highlighted.
+- Listen to a few sentences, press **Stop**, then close and reopen the app: the button now says **Continue** and starts from where you stopped; **From the start** restarts. Reading to the end resets it.
 - **Pause**, then **Resume**: the same sentence starts again from its beginning.
 - ⏮ and ⏭ move one sentence. **Stop** clears the highlight.
 - Change the voice speed while listening. The next sentence uses the new speed.
