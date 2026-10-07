@@ -128,6 +128,16 @@ describe("settings", () => {
   });
 });
 
+test("exportDocumentSummary lists each key detail once, in order of appearance", () => {
+  const doc = buildDocument("Fee $5 due March 5. We close March 5. Late fee $5 after 6:00 PM.");
+  const lines = exportDocumentSummary(doc).split("\n").filter((l) => l.startsWith("- "));
+  expect(lines).toEqual([
+    "- Amount: $5",
+    "- Date/time: March 5",
+    "- Date/time: 6:00 PM",
+  ]);
+});
+
 test("exportDocumentSummary lists key information", () => {
   const doc = buildDocument("Pay $5 by March 3, 2025. Thanks.");
   const text = exportDocumentSummary(doc);
