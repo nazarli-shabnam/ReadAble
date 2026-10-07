@@ -21,7 +21,10 @@ const Fact = ({ kind, value }) => {
       ]}
       accessibilityLabel={`${kind === "date" ? "Date or time" : "Amount"}: ${value}`}
     >
-      <Txt variant="label" style={{ color: colors[1] }}>
+      <Txt
+        variant="label"
+        style={{ color: colors[1], textDecorationLine: kind === "date" ? "underline" : "none" }}
+      >
         {value}
       </Txt>
     </View>

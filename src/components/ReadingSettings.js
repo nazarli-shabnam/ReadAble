@@ -1,6 +1,8 @@
-import { Pressable, StyleSheet, View } from "react-native";
-import { SETTING_LIMITS, OVERLAY_COLORS, clampToStep } from "../constants/settings";
+import { useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { DEFAULT_SETTINGS, SETTING_LIMITS, OVERLAY_COLORS, clampToStep } from "../constants/settings";
 import { FONT_FACES, useTheme } from "../theme";
+import { confirmAsync } from "../utils/dialogs";
 import { Button, Toggle, Txt } from "./ui";
 
 const Stepper = ({ label, value, limits, onChange, format = String }) => {
@@ -34,12 +36,55 @@ const Stepper = ({ label, value, limits, onChange, format = String }) => {
   );
 };
 
+const PREVIEW = "This is how I sound.";
+
+// Lists the installed English voices; choosing one saves it and speaks a short sample.
+const VoicePicker = ({ voices, value, onChange, speech }) => {
+  const [open, setOpen] = useState(false);
+  if (!voices.length) return null;
+  const current = voices.find((v) => v.identifier === value);
+  const choose = (identifier) => {
+    onChange({ voice: identifier });
+    speech.play([PREVIEW], 0, "preview", identifier);
+  };
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={styles.stepper}>
+        <Txt variant="label" style={{ flex: 1 }}>
+          Voice
+        </Txt>
+        <Button
+          label={current ? current.name || current.identifier : "Device default"}
+          accessibilityLabel={`Voice: ${current ? current.name : "device default"}. ${open ? "Hide" : "Show"} voices`}
+          selected={open}
+          onPress={() => setOpen((v) => !v)}
+        />
+      </View>
+      {open && (
+        <ScrollView style={styles.voiceList} nestedScrollEnabled>
+          <View style={{ gap: 6 }}>
+            <Button label="Device default" selected={!current} onPress={() => choose("")} />
+            {voices.map((v) => (
+              <Button
+                key={v.identifier}
+                label={v.name || v.identifier}
+                selected={v.identifier === value}
+                onPress={() => choose(v.identifier)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+};
+
 /**
  * Reading preferences shown in the reader's collapsible panel.
  * @param {object} settings - see DEFAULT_SETTINGS
  * @param {(changes: object) => void} onChange
  */
-export const ReadingSettings = ({ settings, onChange }) => {
+export const ReadingSettings = ({ settings, onChange, voices = [], speech }) => {
   const t = useTheme();
   return (
     <View style={[styles.panel, { backgroundColor: t.field, borderColor: t.border, borderWidth: t.borderWidth }]}>
@@ -89,6 +134,10 @@ export const ReadingSettings = ({ settings, onChange }) => {
         format={(v) => v.toFixed(1)}
       />
 
+      {speech && (
+        <VoicePicker voices={voices} value={settings.voice} onChange={onChange} speech={speech} />
+      )}
+
       <Toggle
         label="High contrast"
         hint="Black text, bold outlines, bright highlights"
@@ -107,13 +156,21 @@ export const ReadingSettings = ({ settings, onChange }) => {
         value={settings.readingRuler}
         onValueChange={(v) => onChange({ readingRuler: v })}
       />
-      <Toggle
-        label="Colored background"
-        hint="A tint behind the text can make it easier to read"
-        value={settings.overlayEnabled}
-        onValueChange={(v) => onChange({ overlayEnabled: v })}
-      />
-      {settings.overlayEnabled && (
+      {settings.highContrast ? (
+        // High contrast always uses a plain background, so tint controls would do nothing.
+        <Txt variant="caption" muted>
+          Colored background is not used in high contrast. Your choice is kept for when you turn
+          high contrast off.
+        </Txt>
+      ) : (
+        <Toggle
+          label="Colored background"
+          hint="A tint behind the text can make it easier to read"
+          value={settings.overlayEnabled}
+          onValueChange={(v) => onChange({ overlayEnabled: v })}
+        />
+      )}
+      {settings.overlayEnabled && !settings.highContrast && (
         <View style={{ gap: 10 }}>
           <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Background color">
             {OVERLAY_COLORS.map((c) => {
@@ -146,6 +203,19 @@ export const ReadingSettings = ({ settings, onChange }) => {
           />
         </View>
       )}
+
+      <Button
+        label="Reset to defaults"
+        variant="danger"
+        onPress={async () => {
+          const ok = await confirmAsync(
+            "Reset reading settings?",
+            "Font, size, spacing, colors, voice and the other reading settings go back to their defaults.",
+            "Reset"
+          );
+          if (ok) onChange(DEFAULT_SETTINGS);
+        }}
+      />
     </View>
   );
 };
@@ -155,5 +225,6 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   stepper: { flexDirection: "row", alignItems: "center", gap: 8 },
   stepperValue: { minWidth: 52, textAlign: "center" },
+  voiceList: { maxHeight: 220 },
   swatch: { width: 44, height: 44, borderRadius: 22 },
 });

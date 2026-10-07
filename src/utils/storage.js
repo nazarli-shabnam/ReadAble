@@ -6,6 +6,7 @@ import {
   SETTING_LIMITS,
   OVERLAY_COLORS,
   FONT_FAMILY_IDS,
+  VIEW_MODE_IDS,
   clampToStep,
 } from "../constants/settings";
 
@@ -219,6 +220,12 @@ export const normalizeSettings = (input) => {
 
   if (OVERLAY_COLORS.some((c) => c.value === source.overlayColor)) {
     settings.overlayColor = source.overlayColor;
+  }
+  if (typeof source.voice === "string" && source.voice.length <= 200) {
+    settings.voice = source.voice;
+  }
+  if (VIEW_MODE_IDS.includes(source.viewMode)) {
+    settings.viewMode = source.viewMode;
   }
   if (FONT_FAMILY_IDS.includes(source.fontFamily)) {
     settings.fontFamily = source.fontFamily;

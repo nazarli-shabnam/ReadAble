@@ -14,6 +14,7 @@ import { useDocumentProcessor } from "./src/hooks/useDocumentProcessor";
 import { useSettings } from "./src/hooks/useSettings";
 import { useSpeech } from "./src/hooks/useSpeech";
 import { useReadingPosition } from "./src/hooks/useReadingPosition";
+import { useVoices } from "./src/hooks/useVoices";
 import { SAMPLE_TEXT } from "./src/constants/sampleText";
 import { runOcrFromImage, OCR_UNAVAILABLE_MESSAGE } from "./src/utils/ocr";
 import { appendScan } from "./src/utils/ocrText";
@@ -39,12 +40,14 @@ export default function App() {
   const [inputText, setInputText] = useState("");
   const [processing, setProcessing] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [viewMode, setViewMode] = useState("simplified");
   const [focusIndex, setFocusIndex] = useState(0);
   // Sentence of the original text that a Q&A answer came from, marked in the reader.
   const [markedIndex, setMarkedIndex] = useState(null);
   const pendingFocus = useRef(null);
-  const [settings, updateSettings] = useSettings();
+  const [settings, updateSettings, settingsLoaded] = useSettings();
+  // The Simplified/Original choice is a saved preference like the rest.
+  const viewMode = settings.viewMode;
+  const setViewMode = (mode) => updateSettings({ viewMode: mode });
   const {
     activeDoc,
     history,
@@ -58,7 +61,10 @@ export default function App() {
     retryLoadHistory,
     runQuestion,
   } = useDocumentProcessor();
-  const speech = useSpeech(settings.ttsRate);
+  const voices = useVoices();
+  // A saved voice that is no longer installed falls back to the device default.
+  const voice = voices.some((v) => v.identifier === settings.voice) ? settings.voice : "";
+  const speech = useSpeech(settings.ttsRate, voice);
   const theme = settings.highContrast ? THEMES.highContrast : THEMES.light;
 
   const scrollRef = useRef(null);
@@ -243,7 +249,8 @@ export default function App() {
     scrollToReader();
   };
 
-  if (!fontsLoaded && !fontError) {
+  // Wait for the fonts and the saved settings so nobody sees the defaults flash by.
+  if ((!fontsLoaded && !fontError) || !settingsLoaded) {
     return (
       <View style={[styles.loading, { backgroundColor: theme.page }]}>
         <ActivityIndicator color={theme.accent} />
@@ -294,6 +301,7 @@ export default function App() {
                 settings={settings}
                 onSettingsChange={updateSettings}
                 speech={speech}
+                voices={voices}
                 readingIndex={readingIndex}
                 markedIndex={markedIndex}
                 focusIndex={Math.min(focusIndex, Math.max(0, sentences.length - 1))}

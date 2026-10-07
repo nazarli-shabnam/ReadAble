@@ -4,21 +4,29 @@ import { loadSettings, normalizeSettings, saveSettings } from "../utils/storage"
 
 /**
  * Persisted reading preferences.
- * @returns {[typeof DEFAULT_SETTINGS, (changes: object) => void]}
- *   settings, and an updater that merges, validates and saves changes
+ * @returns {[typeof DEFAULT_SETTINGS, (changes: object) => void, boolean]}
+ *   settings, an updater that merges, validates and saves changes, and whether
+ *   the saved settings have been loaded yet (render the UI only once they are,
+ *   so nobody sees the defaults flash by)
  */
 export const useSettings = () => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
   const settingsRef = useRef(DEFAULT_SETTINGS);
-  const touchedRef = useRef(false);
+  const loadedRef = useRef(false);
+  // Changes made before the stored settings arrived; applied on top of them.
+  const earlyChangesRef = useRef({});
 
   useEffect(() => {
     let cancelled = false;
     loadSettings().then((stored) => {
-      // Don't let a slow load overwrite a change the user already made.
-      if (cancelled || touchedRef.current) return;
-      settingsRef.current = stored;
-      setSettings(stored);
+      if (cancelled) return;
+      const next = normalizeSettings({ ...stored, ...earlyChangesRef.current });
+      if (Object.keys(earlyChangesRef.current).length) saveSettings(next);
+      settingsRef.current = next;
+      loadedRef.current = true;
+      setSettings(next);
+      setLoaded(true);
     });
     return () => {
       cancelled = true;
@@ -26,12 +34,15 @@ export const useSettings = () => {
   }, []);
 
   const update = useCallback((changes) => {
-    touchedRef.current = true;
+    if (!loadedRef.current) {
+      earlyChangesRef.current = { ...earlyChangesRef.current, ...changes };
+      return;
+    }
     const next = normalizeSettings({ ...settingsRef.current, ...changes });
     settingsRef.current = next;
     setSettings(next);
     saveSettings(next);
   }, []);
 
-  return [settings, update];
+  return [settings, update, loaded];
 };

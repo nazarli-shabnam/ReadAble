@@ -189,3 +189,15 @@ describe("titles and pins", () => {
     expect(await updateDocumentMeta("missing", { pinned: true })).toBe(false);
   });
 });
+
+test("normalizeSettings keeps a voice identifier and drops invalid ones", () => {
+  expect(normalizeSettings({ voice: "com.apple.voice.Alex" }).voice).toBe("com.apple.voice.Alex");
+  expect(normalizeSettings({ voice: 5 }).voice).toBe("");
+  expect(normalizeSettings({ voice: "x".repeat(300) }).voice).toBe("");
+  expect(normalizeSettings({}).voice).toBe("");
+});
+
+test("normalizeSettings keeps a valid view mode and drops unknown ones", () => {
+  expect(normalizeSettings({ viewMode: "original" }).viewMode).toBe("original");
+  expect(normalizeSettings({ viewMode: "sideways" }).viewMode).toBe("simplified");
+});
