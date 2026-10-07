@@ -13,6 +13,12 @@ import { SAMPLE_TEXT } from "../constants/sampleText";
 const texts = (sentences) => sentences.map((s) => s.text);
 
 describe("splitSentences", () => {
+  it("starts a new sentence at heading and label lines", () => {
+    const parts = splitSentences("INVOICE\nTotal due: $50\nDue date: March 5, 2026").map((x) => x.text);
+    expect(parts).toEqual(["INVOICE", "Total due: $50", "Due date: March 5, 2026"]);
+    expect(splitSentences("The library will\nclose on Monday.")).toHaveLength(1);
+  });
+
   test("splits simple sentences", () => {
     expect(texts(splitSentences("Hello world. This is a test. Another sentence!"))).toEqual([
       "Hello world.",
@@ -191,6 +197,15 @@ describe("summarizeText", () => {
 });
 
 describe("simplifyText", () => {
+  it("keeps heading and label lines apart without inventing periods", () => {
+    expect(simplifyText("INVOICE\nTotal due: $50\nDue date: March 5, 2026")).toBe(
+      "INVOICE\nTotal due: $50\nDue date: March 5, 2026"
+    );
+    expect(simplifyText("Terms\nPlease pay within 30 days of the invoice date.")).toBe(
+      "Terms\nPlease pay within 30 days of the invoice date."
+    );
+  });
+
   it("does not split a list at its final \", and\"", () => {
     const list = "You need to bring a signed form, a valid passport, and the original receipt from the store.";
     expect(simplifyText(list)).toBe(list);

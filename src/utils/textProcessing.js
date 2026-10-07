@@ -125,6 +125,25 @@ const NUMBERING_ABBREVIATIONS = new Set("no vol pp fig ch sec art".split(" "));
 const CLOSING_PUNCTUATION = /[.!?"'”’)\]]/;
 const SENTENCE_START = /[A-Z0-9"'“‘(\[]/;
 
+// Words a wrapped line can end on while the sentence carries on below.
+const WRAP_CONTINUATION = /\b(?:a|an|the|to|of|in|on|at|for|and|or|with|by|from|is|are)$/i;
+const SENTENCE_END = /[.!?]["'”’)\]]*$/;
+
+/**
+ * Whether the line break between two lines is structure (a heading, a
+ * "Label: value" line, an address line) rather than hard-wrapping. Wrapped
+ * prose lines are long, end mid-sentence and continue in lowercase; short
+ * unpunctuated lines followed by a capital or number are kept apart.
+ */
+export const keepsLineBreak = (prev, next) => {
+  const p = prev.trim();
+  const n = next.trim();
+  if (!p || !n || SENTENCE_END.test(p) || /^[a-z]/.test(n) || WRAP_CONTINUATION.test(p)) {
+    return false;
+  }
+  return p.endsWith(":") || wordCount(p) <= 5;
+};
+
 const isSentenceEndingPeriod = (text, sentenceStart, dotIndex, nextChar) => {
   let wordStart = dotIndex;
   while (wordStart > sentenceStart && !/\s/.test(text[wordStart - 1])) wordStart--;
@@ -168,7 +187,15 @@ export const splitSentences = (text) => {
       while (next < text.length && /[ \t\r]/.test(text[next])) next++;
       const blankLine = text[next] === "\n";
       const bulletLine = /^(?:[-*•]\s|\d+[.)]\s)/.test(text.slice(next, next + 4));
-      if (blankLine || bulletLine) {
+      const lineEnd = text.indexOf("\n", next);
+      const structural =
+        !blankLine &&
+        !bulletLine &&
+        keepsLineBreak(
+          text.slice(text.lastIndexOf("\n", i - 1) + 1, i),
+          text.slice(next, lineEnd === -1 ? text.length : lineEnd)
+        );
+      if (blankLine || bulletLine || structural) {
         push(start, i);
         start = i + 1;
       }
@@ -363,32 +390,54 @@ const splitClauses = (sentence) => {
 };
 
 const LIST_ITEM = /^(?:[-*•]|\d+[.)])\s/;
-// A line break that only wraps text (not one that starts a list item).
-const WRAPPED_LINE_BREAK = /[ \t]*\n[ \t]*(?!(?:[-*•]|\d+[.)])\s)/g;
+
+// Joins hard-wrapped lines with a space; list items and structural line
+// breaks (see keepsLineBreak) stay on their own lines.
+const joinWrappedLines = (paragraph) => {
+  const lines = paragraph.split(/[ \t]*\n[ \t]*/);
+  return lines.reduce((out, line, i) => {
+    if (i === 0) return line;
+    const sep = LIST_ITEM.test(line) || keepsLineBreak(lines[i - 1], line) ? "\n" : " ";
+    return `${out}${sep}${line}`;
+  });
+};
+
+const simplifySentence = (sentence) =>
+  sentence
+    .replace(SIMPLER_WORDS_PATTERN, (m) => matchCase(m, SIMPLER_WORDS[m.toLowerCase()]))
+    .replace(INNER_CONNECTIVE, "");
 
 /**
  * Produces an easier-to-read version: plainer words, no filler connectives,
  * long sentences split into shorter ones. Paragraphs (separated by blank
- * lines) and list items are kept; hard-wrapped lines are joined.
+ * lines), list items and heading/label lines are kept on their own lines;
+ * hard-wrapped lines are joined.
  */
 export const simplifyText = (text) => {
   if (!text) return "";
   return text
     .split(/\n[ \t]*\n\s*/)
-    .map((paragraph) =>
-      splitSentences(paragraph.trim().replace(WRAPPED_LINE_BREAK, " "))
-        .map((s) =>
-          s.text
-            .replace(SIMPLER_WORDS_PATTERN, (m) =>
-              matchCase(m, SIMPLER_WORDS[m.toLowerCase()])
-            )
-            .replace(INNER_CONNECTIVE, "")
-        )
-        .flatMap(splitClauses)
-        .map(finishSentence)
-        .filter(Boolean)
-        .reduce((out, s) => (out ? `${out}${LIST_ITEM.test(s) ? "\n" : " "}${s}` : s), "")
-    )
+    .map((paragraph) => {
+      const joined = joinWrappedLines(paragraph.trim());
+      const sentences = splitSentences(joined);
+      const lineBreakBetween = (i) =>
+        i >= 0 && i < sentences.length - 1 &&
+        joined.slice(sentences[i].end, sentences[i + 1].start).includes("\n");
+
+      return sentences
+        .flatMap((s, i) => {
+          const pieces = splitClauses(simplifySentence(s.text)).map(finishSentence).filter(Boolean);
+          // A heading or "Label: value" line is not a sentence: don't invent a period.
+          const nextIsList = i + 1 < sentences.length && LIST_ITEM.test(sentences[i + 1].text);
+          const standalone =
+            !LIST_ITEM.test(s.text) &&
+            !SENTENCE_END.test(s.text) &&
+            (lineBreakBetween(i - 1) || (lineBreakBetween(i) && !nextIsList));
+          if (standalone && pieces.length === 1) pieces[0] = pieces[0].replace(/\.$/, "");
+          return pieces.map((piece, j) => ({ piece, br: j === 0 && lineBreakBetween(i - 1) }));
+        })
+        .reduce((out, { piece, br }) => (out ? `${out}${br ? "\n" : " "}${piece}` : piece), "");
+    })
     .filter(Boolean)
     .join("\n\n");
 };
